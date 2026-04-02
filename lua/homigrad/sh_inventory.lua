@@ -244,7 +244,7 @@ if CLIENT then
 			end
 		end
 		local time = CurTime() + 3
-		local searchEndTime = plyMenu.Created + 0.6 + count * 0.3
+		local searchEndTime = plyMenu.Created + 1.4 + count * 0.75
 		function DScrollPanel:Paint(w, h)
 			local txt = "Searching"
 			if time > 0 then
@@ -292,7 +292,7 @@ if CLIENT then
 				button:DockMargin(5, 0, 2, 0)
 				button:SetSize(0,0)
 				--button:SetSize(sizeX / 5.8, sizeY / 5.8)
-				button.Created = CurTime() + (!ent.foundloot[i] and 0.5 or 0) + count2 * 0.25
+				button.Created = CurTime() + (!ent.foundloot[i] and 1.1 or 0) + count2 * 0.55
 				button.Think = function(self)
 					if self.Created and (self.Created < CurTime()) then
 						self:SetSize(sizeX / 5.8, sizeY / 5.8)

@@ -7,6 +7,33 @@ end
 
 ENT.LegacyInDoorSound = false
 
+ENT.ExplosionExtraSounds = {
+	"explosionextra/explode_1.wav",
+	"explosionextra/explode_2.wav",
+	"explosionextra/explode_3.wav",
+	"explosionextra/explode_4.wav",
+	"explosionextra/explode_5.wav",
+	"explosionextra/explode_6.wav",
+	"explosionextra/explode_7.wav",
+	"explosionextra/explode_8.wav",
+	"explosionextra/explode_9.wav"
+}
+
+function ENT:PlayExtraExplosionSound(pos)
+	if hg and hg.PlayExtraExplosionSound then
+		hg.PlayExtraExplosionSound(pos, self:EntIndex(), 1)
+		return
+	end
+
+	local snd = self.ExplosionExtraSounds[math.random(#self.ExplosionExtraSounds)]
+	EmitSound(snd, pos, self:EntIndex() + 600, CHAN_ITEM, 1, 145, 0, math.random(95, 105))
+	timer.Simple(0.04, function()
+		if IsValid(self) then
+			EmitSound(snd, pos, self:EntIndex() + 601, CHAN_AUTO, 0.7, 135, 0, math.random(90, 100))
+		end
+	end)
+end
+
 function ENT:Initialize()
 	self:SetModel(self.Model)
 	self:PhysicsInit(SOLID_VPHYSICS)
@@ -218,6 +245,7 @@ function ENT:Explode()
 		net.WriteBool(self:WaterLevel() > 0)
 		net.WriteString(self.SoundWater[math.random(#self.SoundWater)])
 	net.Broadcast()
+	self:PlayExtraExplosionSound(selfPos)
 
 	if self:WaterLevel() > 0 then
 		self:EmitSound(self.SoundWater, 140, 85, 1, CHAN_WEAPON)
