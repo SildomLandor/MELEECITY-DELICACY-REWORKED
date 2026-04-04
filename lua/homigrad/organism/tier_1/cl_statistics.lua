@@ -65,6 +65,7 @@ local list = {
 	"temperature",
 	"tempchanging",
 	"heatbuff",
+	"blindness",
 	"fear",
 	"assimilated",
 	"berserk",

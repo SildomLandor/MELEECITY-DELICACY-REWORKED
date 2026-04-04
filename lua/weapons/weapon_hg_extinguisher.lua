@@ -41,7 +41,7 @@ SWEP.weaponPos = Vector(0,2,0.3)
 SWEP.weaponAng = Angle(0,0,0)
 
 SWEP.DamageType = DMG_CLUB
-SWEP.DamagePrimary = 41
+SWEP.DamagePrimary = 38
 SWEP.DamageSecondary = 15
 
 SWEP.PenetrationPrimary = 6
@@ -52,7 +52,7 @@ SWEP.MaxPenLen = 5
 SWEP.PenetrationSizePrimary = 3
 SWEP.PenetrationSizeSecondary = 1.25
 
-SWEP.StaminaPrimary = 35
+SWEP.StaminaPrimary = 34
 SWEP.StaminaSecondary = 15
 
 SWEP.AttackLen1 = 65
@@ -106,6 +106,7 @@ SWEP.HeavyAttackMaxChargeTime = 2.0 -- Time in seconds to reach max damage/shake
 SWEP.HeavyAttackSwingAng = -30 -- Custom swing angle for heavy attack
 SWEP.HeavyAttackRads = 60 -- Custom radius/arc for heavy attack
 SWEP.HeavyAttackStamina = 35
+SWEP.HeavyChargeHoldPos = Vector(12,5.5,-1.45)
 
 
 SWEP.CanHeavyAttack = true -- Set to true to enable

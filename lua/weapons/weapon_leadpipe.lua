@@ -52,6 +52,7 @@ SWEP.HeavyAttackViewPunch = Angle(5, 0, 0) -- View punch angle on hit
 SWEP.HeavyAttackMaxChargeTime = 2.0 -- Time in seconds to reach max damage/shake
 SWEP.HeavyAttackSwingAng = -90 -- Custom swing angle for heavy attack
 SWEP.HeavyAttackRads = 95 -- Custom radius/arc for heavy attack
+SWEP.HeavyChargeHoldPos = Vector(5,1,1)
 
 SWEP.AnimList = {
     ["idle"] = "Idle",
@@ -86,10 +87,10 @@ SWEP.HitFleshExtra = {
 SWEP.AttackPos = Vector(0,0,0)
 
 SWEP.DamageType = DMG_CLUB
-SWEP.DamagePrimary = 25
+SWEP.DamagePrimary = 22
 SWEP.DamageSecondary = 9
 
-SWEP.PenetrationPrimary = 3
+SWEP.PenetrationPrimary = 2
 SWEP.PenetrationSecondary = 3
 
 SWEP.MaxPenLen = 3
@@ -97,11 +98,11 @@ SWEP.MaxPenLen = 3
 SWEP.PenetrationSizePrimary = 2
 SWEP.PenetrationSizeSecondary = 2
 
-SWEP.StaminaPrimary = 27
+SWEP.StaminaPrimary = 26
 SWEP.StaminaSecondary = 15
 SWEP.HeavyAttackStamina = 24
 
-SWEP.AttackLen1 = 55
+SWEP.AttackLen1 = 52
 SWEP.AttackLen2 = 30
 
 SWEP.NoHolster = true

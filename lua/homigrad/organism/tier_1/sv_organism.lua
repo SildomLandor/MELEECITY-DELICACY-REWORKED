@@ -77,6 +77,7 @@ hook.Add("Org Clear", "Main", function(org)
 	org.assimilated = 0
 	org.berserk = 0
 	org.noradrenaline = 0
+	org.blindness = nil
 
 	if IsValid(org.owner) then
 		if org.owner:IsPlayer() and org.owner:Alive() then
@@ -163,6 +164,7 @@ local function send_organism(org, ply)
 	sendtable.noradrenaline = org.noradrenaline
 	sendtable.LodgedEntities = org.LodgedEntities
 	sendtable.CantCheckPulse = org.CantCheckPulse
+	sendtable.blindness = org.blindness
 
 	sendtable.critical = org.critical
 	sendtable.incapacitated = org.incapacitated

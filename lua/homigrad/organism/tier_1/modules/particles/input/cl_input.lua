@@ -101,7 +101,7 @@ net.Receive("hg_brainmist", function()
 	if IsValid(renderEnt) and renderEnt:LookupBone("ValveBiped.Bip01_Head1") then
 		local bone = renderEnt:LookupBone("ValveBiped.Bip01_Head1")
 		local headpos, headang = renderEnt:GetBonePosition(bone)
-		if headpos then
+		if headpos and (renderEnt:IsRagdoll() or headpos:DistToSqr(pos) <= 40000) then
 			pos = headpos
 			ang = headang
 		end

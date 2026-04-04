@@ -14,23 +14,16 @@ if(CLIENT)then
 	MODE.ConVar_SubRole_Traitor_SOE = CreateClientConVar(MODE.ConVarName_SubRole_Traitor_SOE, "traitor_default_soe", true, true, "Выбор роли трейтора в режиме SOE хомисайда")
 	MODE.ConVar_SubRole_Traitor = CreateClientConVar(MODE.ConVarName_SubRole_Traitor, "traitor_default", true, true, "Выбор роли трейтора в стандартном режиме хомисайда")
 	CreateClientConVar("hmcd_traitor_loadout", "", true, true, "Traitor loadout data")
-
-	hook.Add("Initialize", "HMCD_InitLoadout", function()
-		local savedData = file.Read("meleecity_traitor_loadout.txt", "DATA")
-		if savedData then
-			local cv = GetConVar("hmcd_traitor_loadout")
-			if cv then cv:SetString(savedData) end
-		end
-	end)
 end
 
 local TraitorItems = {
-	["weapon_zoraki"] = 5,
+	["weapon_pl15"] = 15,
 	["weapon_buck200knife"] = 3,
 	["weapon_sogknife"] = 3,
 	["weapon_fiberwire"] = 3,
 	["weapon_hg_rgd_tpik"] = 6,
 	["weapon_adrenaline"] = 4,
+	["weapon_pepperspray_tpik"] = 4,
 	["weapon_hg_shuriken"] = 2,
 	["weapon_hg_smokenade_tpik"] = 3,
 	["weapon_traitor_ied"] = 6,
@@ -47,6 +40,8 @@ local TraitorItems = {
 local TraitorAddons = {
 	["weapon_p22_extra_mag"] = {cost = 2, parent = "weapon_p22"},
 	["weapon_p22_silencer"] = {cost = 2, parent = "weapon_p22"},
+	["weapon_pl15_extra_mag"] = {cost = 3, parent = "weapon_pl15"},
+	["weapon_pl15_silencer"] = {cost = 2, parent = "weapon_pl15"},
 }
 
 local Skillsets = {
@@ -265,11 +260,45 @@ local function SanitizeLoadout(rawLoadout, fillRandomIfEmpty)
 	return normalizedLoadout
 end
 
+local function EncodeNormalizedLoadoutString(rawLoadout, fillRandomIfEmpty)
+	local normalizedLoadout = SanitizeLoadout(rawLoadout, fillRandomIfEmpty)
+	local encodedLoadout = util.TableToJSON(normalizedLoadout)
+	if not isstring(encodedLoadout) or encodedLoadout == "" then
+		encodedLoadout = "{\"weapons\":[],\"skillset\":\"none\"}"
+	end
+	return normalizedLoadout, encodedLoadout
+end
+
+if CLIENT then
+	hook.Add("Initialize", "HMCD_InitLoadout", function()
+		local savedData = file.Read("meleecity_traitor_loadout.txt", "DATA")
+		local decoded = {}
+
+		if isstring(savedData) and savedData ~= "" then
+			local ok, data = pcall(util.JSONToTable, savedData)
+			if ok and istable(data) then
+				decoded = data
+			end
+		end
+
+		local _, normalizedString = EncodeNormalizedLoadoutString(decoded, false)
+		file.Write("meleecity_traitor_loadout.txt", normalizedString)
+
+		local cv = GetConVar("hmcd_traitor_loadout")
+		if cv then
+			cv:SetString(normalizedString)
+		end
+	end)
+end
+
 local function ApplyLoadout(ply)
 	local loadoutStr = ply:GetInfo("hmcd_traitor_loadout")
-	local data = {}
-	if loadoutStr and loadoutStr ~= "" then
-		data = util.JSONToTable(loadoutStr) or {}
+	local data = nil
+	if isstring(loadoutStr) and loadoutStr ~= "" then
+		local ok, decoded = pcall(util.JSONToTable, loadoutStr)
+		if ok and istable(decoded) then
+			data = decoded
+		end
 	end
 
 	local normalizedLoadout = SanitizeLoadout(data, true)
@@ -277,15 +306,18 @@ local function ApplyLoadout(ply)
 	local skillset = normalizedLoadout.skillset
 	local hasP22ExtraMag = table.HasValue(weapons, "weapon_p22_extra_mag")
 	local hasP22Silencer = table.HasValue(weapons, "weapon_p22_silencer")
+	local hasPL15ExtraMag = table.HasValue(weapons, "weapon_pl15_extra_mag")
+	local hasPL15Silencer = table.HasValue(weapons, "weapon_pl15_silencer")
 	local p22Weapon
+	local pl15Weapon
 
 	for _, wep in pairs(weapons) do
 		if not TraitorAddons[wep] then
 			local wepent = ply:Give(wep)
 			if wep == "weapon_p22" and IsValid(wepent) then
 				p22Weapon = wepent
-			elseif wep == "weapon_zoraki" and IsValid(wepent) then
-				timer.Simple(1, function() if IsValid(wepent) then wepent:ApplyAmmoChanges(2) end end)
+			elseif wep == "weapon_pl15" and IsValid(wepent) then
+				pl15Weapon = wepent
 			elseif wep == "weapon_taser" and IsValid(wepent) then
 				ply:GiveAmmo(wepent:GetMaxClip1() * 3, wepent:GetPrimaryAmmoType(), true)
 			end
@@ -353,6 +385,67 @@ local function ApplyLoadout(ply)
 		end
 
 		if hasP22Silencer and not table.HasValue(inv["Attachments"], "supressor4") then
+			inv["Attachments"][#inv["Attachments"] + 1] = "supressor4"
+		end
+	end
+
+	if hasPL15ExtraMag or hasPL15Silencer then
+		local extraMagApplied = false
+
+		local function ensurePL15Suppressor(wep)
+			if not IsValid(wep) or not wep.attachments or not wep.availableAttachments then return false end
+			if wep.attachments.barrel and istable(wep.attachments.barrel) and wep.attachments.barrel[1] == "supressor4" then
+				return true
+			end
+
+			hg.AddAttachmentForce(ply, wep, "supressor4")
+
+			if wep.attachments.barrel and istable(wep.attachments.barrel) and wep.attachments.barrel[1] == "supressor4" then
+				return true
+			end
+
+			local barrel = wep.availableAttachments.barrel
+			if not barrel then return false end
+
+			local idx
+			for i, att in pairs(barrel) do
+				if istable(att) and att[1] == "supressor4" then
+					idx = i
+					break
+				end
+			end
+
+			if not idx then return false end
+
+			wep.attachments.barrel = barrel[idx]
+			if wep.SyncAtts then
+				wep:SyncAtts()
+			end
+
+			return true
+		end
+
+		local function applyPL15Addons(wep)
+			if not IsValid(wep) then return end
+			if hasPL15ExtraMag and not extraMagApplied then
+				ply:GiveAmmo(wep:GetMaxClip1(), wep:GetPrimaryAmmoType(), true)
+				extraMagApplied = true
+			end
+			if hasPL15Silencer then
+				ensurePL15Suppressor(wep)
+			end
+		end
+
+		applyPL15Addons(pl15Weapon)
+
+		for _, delay in ipairs({0, 0.2, 0.5, 1.0}) do
+			timer.Simple(delay, function()
+				if not IsValid(ply) then return end
+				applyPL15Addons(ply:GetWeapon("weapon_pl15"))
+			end)
+		end
+
+		if hasPL15Silencer and not table.HasValue(inv["Attachments"], "supressor4") then
 			inv["Attachments"][#inv["Attachments"] + 1] = "supressor4"
 		end
 	end

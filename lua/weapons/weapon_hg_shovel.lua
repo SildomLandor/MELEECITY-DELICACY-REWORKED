@@ -39,11 +39,11 @@ SWEP.weaponPos = Vector(0,0,-24)
 SWEP.weaponAng = Angle(0,270,-2)
 
 SWEP.DamageType = DMG_CLUB
-SWEP.DamagePrimary = 40
+SWEP.DamagePrimary = 35
 SWEP.NeckBreakChance = 0.01
 SWEP.DamageSecondary = 15
-SWEP.BreakBoneMul = 0.85
-SWEP.PainMultiplier = 0.95
+SWEP.BreakBoneMul = 0.65
+SWEP.PainMultiplier = 0.85
 
 SWEP.PenetrationPrimary = 3
 SWEP.PenetrationSecondary = 4
@@ -57,8 +57,8 @@ SWEP.StaminaPrimary = 39
 SWEP.HeavyAttackStamina = 30
 SWEP.StaminaSecondary = 24
 
-SWEP.AttackLen1 = 75
-SWEP.AttackLen2 = 45
+SWEP.AttackLen1 = 65
+SWEP.AttackLen2 = 40
 
 SWEP.AnimList = {
     ["idle"] = "Idle",

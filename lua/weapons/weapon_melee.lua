@@ -47,6 +47,8 @@ SWEP.ismelee = true
 SWEP.ismelee2 = true
 
 SWEP.AttackTime = 0.2
+SWEP.DrawAnimTime = 1.25
+SWEP.EquipTime = 1
 SWEP.AnimTime1 = 0.7
 SWEP.WaitTime1 = 0.5
 SWEP.AttackLen1 = 55
@@ -146,6 +148,9 @@ SWEP.sprint_ang = Angle(30,0,0)
 
 SWEP.HoldPos = Vector(-10,3,-2)
 SWEP.HoldAng = Angle(-10,5,0)
+SWEP.HeavyChargeHoldPos = Vector(0,0,0)
+SWEP.HeavyChargeHoldAng = Angle(0,0,0)
+SWEP.HeavyChargeStaminaDrainPerSecond = 5
 
 SWEP.basebone = 1
 
@@ -162,6 +167,10 @@ end
 
 function SWEP:KeyDown(key)
 	return hg.KeyDown(self:GetOwner(),key)
+end
+
+function SWEP:IsEquipLocked()
+    return (self.EquipLockEnd or 0) > CurTime()
 end
 
 function SWEP:InUse()
@@ -565,6 +574,17 @@ function SWEP:ModelAnim(model, pos, ang)
 
     addPosLerp.z = addPosLerp.z + ((hg.KeyDown(owner, IN_DUCK)) and -2 or 0)
 
+    local chargeState = self.CanHeavyAttack and ((self.GetChargeState and self:GetChargeState()) or self:GetDTInt(6)) or 0
+    local isChargingHeavy = chargeState == 1 or chargeState == 2
+
+    if isChargingHeavy then
+        addPosLerp:Add(self.HeavyChargeHoldPos or Vector(0,0,0))
+        local chargeHoldAng = self.HeavyChargeHoldAng or Angle(0,0,0)
+        addAngLerp.p = addAngLerp.p + chargeHoldAng.p
+        addAngLerp.y = addAngLerp.y + chargeHoldAng.y
+        addAngLerp.r = addAngLerp.r + chargeHoldAng.r
+    end
+
     if !self:CustomBlockAnim(addPosLerp, addAngLerp) then
         addPosLerp.z = addPosLerp.z + (self:GetBlocking() and -2 or 0)
         addPosLerp.x = addPosLerp.x + (self:GetBlocking() and -4 or 0)
@@ -833,7 +853,8 @@ end
 
 function SWEP:OwnerChanged()
     if IsValid(self:GetOwner()) and self:GetOwner():IsPlayer() then
-        self:PlayAnim("deploy",0.5,false,nil,false)
+        self.EquipLockEnd = CurTime() + math.max(self.EquipTime or 1, 0)
+        self:PlayAnim("deploy", self.DrawAnimTime or 1.25, false, nil, false, true)
         self:SetHold(self.HoldType)
         timer.Simple(0,function() self.picked = true end)
     else
@@ -851,7 +872,8 @@ SWEP.Initialzed = false
 function SWEP:Deploy()
     if SERVER and self.Initialzed and not self:GetOwner().noSound then self:GetOwner():EmitSound(self.DeploySnd,65) end
     self.Initialzed = true
-    self:PlayAnim("deploy", 1, false, nil, false)
+    self.EquipLockEnd = CurTime() + math.max(self.EquipTime or 1, 0)
+    self:PlayAnim("deploy", self.DrawAnimTime or 1.25, false, nil, false, true)
     self:SetHold(self.HoldType)
 	
 	return true
@@ -861,6 +883,7 @@ function SWEP:Holster(wep)
     self:SetInAttack(false)
     if self.CanHeavyAttack then
         if self.SetChargeState then self:SetChargeState(0) else self:SetDTInt(6, 0) end
+        self.HeavyAttackFeintBlockUntilRelease = false
         if CLIENT then
             self.ShakePos = Vector(0,0,0)
             self.ShakeAng = Angle(0,0,0)
@@ -873,6 +896,7 @@ function SWEP:OnDrop()
     self:SetInAttack(false)
     if self.CanHeavyAttack then
         if self.SetChargeState then self:SetChargeState(0) else self:SetDTInt(6, 0) end
+        self.HeavyAttackFeintBlockUntilRelease = false
         if CLIENT then
             self.ShakePos = Vector(0,0,0)
             self.ShakeAng = Angle(0,0,0)
@@ -1179,7 +1203,7 @@ function SWEP:BlockingLogic(ent, mul, attacktype, trace)
 
             if defenderBlockTier >= attackerBlockTier then
                 if attacktype == 3 then
-                    ent:EmitSound("blockbreak.ogg", 75, 125)
+                    ent:EmitSound("blockbreak.ogg", 65, 112)
                     if SERVER then
                         hg.drop(ent)
                         
@@ -1360,11 +1384,21 @@ function SWEP:CustomThink()
         local state = self.GetChargeState and self:GetChargeState() or self:GetDTInt(6)
         local nextState = self.GetNextChargeStateTime and self:GetNextChargeStateTime() or self:GetDTFloat(9)
         local curTime = CurTime()
+        local attackDown = hg.KeyDown(owner, IN_ATTACK)
+        local useDown = hg.KeyDown(owner, IN_USE)
+        local feintPressed = owner.KeyPressed and owner:KeyPressed(IN_ATTACK2)
+
+        if self.HeavyAttackFeintBlockUntilRelease and not attackDown then
+            self.HeavyAttackFeintBlockUntilRelease = false
+        end
 
         if not IsValid(owner) or not owner:Alive() or owner.fake or (owner.organism and (owner.organism.fake or owner.organism.otrub)) or IsValid(owner.FakeRagdoll) then
             if state ~= 0 then
                 if self.SetChargeState then self:SetChargeState(0) else self:SetDTInt(6, 0) end
                 self.HeavyAttackStaminaDeducted = false
+                self.HeavyAttackFeintBlockUntilRelease = false
+                self.HeavyChargeStaminaDrainAcc = 0
+                self.HeavyChargeStaminaDrainTick = curTime
                 if CLIENT then
                     self.ShakePos = Vector(0,0,0)
                     self.ShakeAng = Angle(0,0,0)
@@ -1374,8 +1408,35 @@ function SWEP:CustomThink()
                 owner:StopSound("pwb2/weapons/mac11/draw.wav")
                 self:PlayAnim("idle", 1, false, nil, false)
             end
+        elseif (state == 1 or state == 2) and useDown and attackDown and feintPressed and not self:GetInAttack() then
+            local cancelTime = self.HeavyAttackAnimTimeBegin
+            if state == 1 then
+                local startTime = self.GetChargeStartTime and self:GetChargeStartTime() or self:GetDTFloat(10)
+                cancelTime = math.Clamp(curTime - startTime, 0.05, self.HeavyAttackAnimTimeBegin)
+            end
+            local feintLockTime = math.max(cancelTime, 0.5)
+            self:PlayAnim(self.Attack_Charge_Begin, cancelTime, false, nil, true, false)
+            if self.SetChargeState then self:SetChargeState(0) else self:SetDTInt(6, 0) end
+            if self.SetNextChargeStateTime then self:SetNextChargeStateTime(0) else self:SetDTFloat(9, 0) end
+            self.HeavyAttackStaminaDeducted = false
+            self.HeavyChargeStaminaDrainAcc = 0
+            self.HeavyChargeStaminaDrainTick = curTime
+            self.HeavyAttackFeintLockEndTime = curTime + feintLockTime
+            self.HeavyAttackFeintBlockUntilRelease = true
+            self:SetInAttack(false)
+            self:SetLastAttack(curTime)
+            self:SetAttackWait(feintLockTime)
+            self.lastattack = curTime
+            self.attackwait = feintLockTime
+            if CLIENT then
+                self.ShakePos = Vector(0,0,0)
+                self.ShakeAng = Angle(0,0,0)
+            end
+            state = 0
         elseif state == 0 then
-            if hg.KeyDown(owner, IN_USE) and hg.KeyDown(owner, IN_ATTACK) and not self:GetInAttack() and (self:GetLastAttack() + self:GetAttackWait() < curTime) and not self:GetBlocking() then
+            self.HeavyChargeStaminaDrainAcc = 0
+            self.HeavyChargeStaminaDrainTick = curTime
+            if useDown and attackDown and not self.HeavyAttackFeintBlockUntilRelease and not self:GetInAttack() and (self:GetLastAttack() + self:GetAttackWait() < curTime) and not self:GetBlocking() and not self:IsEquipLocked() then
                 if owner.organism and owner.organism.stamina and owner.organism.stamina[1] and owner.organism.stamina[1] < 80 then return end
                 if self.SetChargeState then self:SetChargeState(1) else self:SetDTInt(6, 1) end
                 self.HeavyAttackStaminaDeducted = false
@@ -1497,9 +1558,31 @@ function SWEP:CustomThink()
             end
         elseif state == 3 then
              -- Attack logic is handled by GetInAttack() block
+             self.HeavyChargeStaminaDrainAcc = 0
+             self.HeavyChargeStaminaDrainTick = curTime
              if not self:GetInAttack() then
                  if self.SetChargeState then self:SetChargeState(0) else self:SetDTInt(6, 0) end
              end
+        end
+
+        if SERVER then
+            if state ~= 0 and state ~= 3 and hg.KeyDown(owner, IN_ATTACK) then
+                self.HeavyChargeStaminaDrainTick = self.HeavyChargeStaminaDrainTick or curTime
+                self.HeavyChargeStaminaDrainAcc = (self.HeavyChargeStaminaDrainAcc or 0) + math.max(curTime - self.HeavyChargeStaminaDrainTick, 0)
+                self.HeavyChargeStaminaDrainTick = curTime
+
+                if owner.organism and owner.organism.stamina then
+                    while self.HeavyChargeStaminaDrainAcc >= 1 do
+                        owner.organism.stamina.subadd = owner.organism.stamina.subadd + (self.HeavyChargeStaminaDrainPerSecond or 5)
+                        self.HeavyChargeStaminaDrainAcc = self.HeavyChargeStaminaDrainAcc - 1
+                    end
+                else
+                    self.HeavyChargeStaminaDrainAcc = 0
+                end
+            else
+                self.HeavyChargeStaminaDrainAcc = 0
+                self.HeavyChargeStaminaDrainTick = curTime
+            end
         end
     end
     
@@ -1507,7 +1590,9 @@ function SWEP:CustomThink()
 
     //if SERVER then
         local oldblocking = self:GetBlocking()
-        local blocking = ((CurTime() - self:GetStartedBlocking()) > 1 or oldblocking) and owner.organism and owner.organism.stamina and owner.organism.stamina[1] and owner.organism.stamina[1] > 90 and !self:GetInAttack() and (self:GetAttackTime() - CurTime() - 0) < 0 and self:CanBlock() and hg.KeyDown(owner, IN_ATTACK2)
+        local now = CurTime()
+        local feintLockActive = (self.HeavyAttackFeintLockEndTime or 0) > now
+        local blocking = not feintLockActive and ((now - self:GetStartedBlocking()) > 1 or oldblocking) and owner.organism and owner.organism.stamina and owner.organism.stamina[1] and owner.organism.stamina[1] > 90 and !self:GetInAttack() and (self:GetAttackTime() - now - 0) < 0 and self:CanBlock() and hg.KeyDown(owner, IN_ATTACK2)
         --if self:CutDuct() then return end
         self:SetBlocking(blocking)
         
@@ -2022,6 +2107,7 @@ SWEP.SwingAng2 = 0
 function SWEP:PrimaryAttack()
     if not game.SinglePlayer() and not IsFirstTimePredicted() then return end
     local ply = self:GetOwner()
+    if self:IsEquipLocked() then return end
 
     if self.cutthroat and self.cutthroat + 1 > CurTime() then return end
     if self.CanSuicide and ply.suiciding then return end
@@ -2127,12 +2213,14 @@ function SWEP:CutDuct()
 end
 
 function SWEP:CanBlock()
+    if (self.HeavyAttackFeintLockEndTime or 0) > CurTime() then return false end
     if self.CanHeavyAttack and self.GetChargeState and self:GetChargeState() > 0 then return false end
     return true
 end
 
 function SWEP:SecondaryAttack(override)
     local ply = self:GetOwner()
+    if self:IsEquipLocked() then return end
     if ply.organism and ply.organism.larmamputated and self.TwoHanded then return end
 
     if self.CanHeavyAttack and (hg.KeyDown(ply, IN_USE) or self:GetChargeState() > 0) then return end
@@ -2320,11 +2408,11 @@ elseif CLIENT then
         
         if mat == "wood" then
             if isBroken then
-                     for i=1, 60 do
+                     for i=1, 30 do
                         local part = emitter:Add("effects/fleck_wood" .. math.random(1,2), pos)
                         if part then
-                            part:SetVelocity(VectorRand() * 400 + Vector(0,0,200))
-                            part:SetDieTime(6)
+                            part:SetVelocity(VectorRand() * 250 + Vector(0,0,120))
+                            part:SetDieTime(3.5)
                             part:SetStartAlpha(255)
                             part:SetEndAlpha(0)
                             part:SetStartSize(2)
@@ -2335,15 +2423,15 @@ elseif CLIENT then
                             part:SetBounce(0.4)
                         end
                     end
-                 for i=1, 10 do
+                 for i=1, 5 do
                      local part = emitter:Add("particle/smokesprites_000" .. math.random(1,9), pos)
                      if part then
-                         part:SetVelocity(VectorRand() * 50)
+                         part:SetVelocity(VectorRand() * 28)
                          part:SetDieTime(3)
-                         part:SetStartAlpha(150)
+                         part:SetStartAlpha(110)
                          part:SetEndAlpha(0)
-                         part:SetStartSize(15)
-                         part:SetEndSize(30)
+                         part:SetStartSize(10)
+                         part:SetEndSize(20)
                          part:SetRoll(math.Rand(0, 360))
                          part:SetColor(100, 90, 70)
                      end
@@ -2377,40 +2465,40 @@ elseif CLIENT then
              
         elseif mat == "metal" then
             if isBroken then
-                for i=1, 80 do
+                for i=1, 35 do
                     local part = emitter:Add("effects/spark", pos)
                     if part then
-                        part:SetVelocity(VectorRand() * 500)
-                        part:SetDieTime(2.5)
+                        part:SetVelocity(VectorRand() * 260)
+                        part:SetDieTime(1.2)
                         part:SetStartAlpha(255)
                         part:SetEndAlpha(0)
-                        part:SetStartSize(2.5)
+                        part:SetStartSize(1.8)
                         part:SetEndSize(0)
                         part:SetRoll(math.Rand(0, 360))
                         part:SetGravity(Vector(0,0,-350))
                         part:SetCollide(true)
-                        part:SetBounce(0.7)
+                        part:SetBounce(0.45)
                     end
                 end
                  local part = emitter:Add("effects/yellowflare", pos)
                  if part then
                      part:SetVelocity(Vector(0,0,0))
-                     part:SetDieTime(0.3)
+                     part:SetDieTime(0.16)
                      part:SetStartAlpha(255)
                      part:SetEndAlpha(0)
-                     part:SetStartSize(80)
+                     part:SetStartSize(45)
                      part:SetEndSize(0)
                  end
                  
-                 for i=1, 6 do
+                 for i=1, 3 do
                      local part = emitter:Add("particle/smokesprites_000" .. math.random(1,9), pos)
                      if part then
-                         part:SetVelocity(VectorRand() * 40)
-                         part:SetDieTime(2.5)
-                         part:SetStartAlpha(180)
+                         part:SetVelocity(VectorRand() * 24)
+                         part:SetDieTime(1.7)
+                         part:SetStartAlpha(120)
                          part:SetEndAlpha(0)
-                         part:SetStartSize(15)
-                         part:SetEndSize(40)
+                         part:SetStartSize(10)
+                         part:SetEndSize(22)
                          part:SetRoll(math.Rand(0, 360))
                          part:SetColor(100,100,100)
                      end

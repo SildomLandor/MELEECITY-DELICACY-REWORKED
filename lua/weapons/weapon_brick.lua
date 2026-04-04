@@ -27,7 +27,7 @@ SWEP.Attack2HitFlesh = "Flesh.ImpactHard"
 SWEP.DeploySnd = "Concrete.ImpactHard"
 
 SWEP.DamageType = DMG_CLUB
-SWEP.DamagePrimary = 10
+SWEP.DamagePrimary = 8
 SWEP.DamageSecondary = 6
 
 SWEP.PenetrationPrimary = 3
@@ -38,7 +38,7 @@ SWEP.MaxPenLen = 2
 SWEP.PenetrationSizePrimary = 2
 SWEP.PenetrationSizeSecondary = 2
 
-SWEP.StaminaPrimary = 15
+SWEP.StaminaPrimary = 14
 SWEP.StaminaSecondary = 10
 
 SWEP.AttackTime = 0.25

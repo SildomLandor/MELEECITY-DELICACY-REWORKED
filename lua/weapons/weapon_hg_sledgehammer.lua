@@ -39,11 +39,11 @@ SWEP.weaponPos = Vector(0.6,-0.1,-7)
 SWEP.weaponAng = Angle(0,-90,0)
 SWEP.modelscale = 0.89
 
-SWEP.DamagePrimary = 59
+SWEP.DamagePrimary = 51
 SWEP.NeckBreakChance = 0.1
-SWEP.DamageSecondary = 18
-SWEP.BreakBoneMul = 1.12
-SWEP.PainMultiplier = 1.5
+SWEP.DamageSecondary = 16
+SWEP.BreakBoneMul = 1.05
+SWEP.PainMultiplier = 0.85
 
 SWEP.PenetrationPrimary = 4
 SWEP.PenetrationSecondary = 1.6
@@ -53,11 +53,11 @@ SWEP.MaxPenLen = 6
 SWEP.PenetrationSizePrimary = 3
 SWEP.PenetrationSizeSecondary = 1.25
 
-SWEP.StaminaPrimary = 40
+SWEP.StaminaPrimary = 39
 SWEP.StaminaSecondary = 30
-SWEP.HeavyAttackStamina = 45
+SWEP.HeavyAttackStamina = 43
 
-SWEP.AttackLen1 = 65
+SWEP.AttackLen1 = 60
 SWEP.AttackLen2 = 45
 
 SWEP.AnimList = {
@@ -108,6 +108,7 @@ SWEP.HeavyAttackViewPunch = Angle(5, 0, 0) -- View punch angle on hit
 SWEP.HeavyAttackMaxChargeTime = 3 -- Time in seconds to reach max damage/shake
 SWEP.HeavyAttackSwingAng = -90 -- Custom swing angle for heavy attack
 SWEP.HeavyAttackRads = 95 -- Custom radius/arc for heavy attack
+SWEP.HeavyChargeHoldPos = Vector(5,1,1)
 
 
 SWEP.CanHeavyAttack = true -- Set to true to enable

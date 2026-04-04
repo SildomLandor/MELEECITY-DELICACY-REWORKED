@@ -21,10 +21,10 @@ SWEP.SuicideTime = 0.5
 SWEP.CanSuicide = true
 SWEP.SuicidePunchAng = Angle(-5, -15, 0)
 
-SWEP.BleedMultiplier = 1.5
-SWEP.PainMultiplier = 1.8
+SWEP.BleedMultiplier = 1.3
+SWEP.PainMultiplier = 1.5
 
-SWEP.DamagePrimary = 24
+SWEP.DamagePrimary = 20
 SWEP.DamageSecondary = 10
 
 SWEP.setlh = false
@@ -78,8 +78,8 @@ function SWEP:Initialize()
 end
 
 SWEP.AttackTime = 0.3
-SWEP.AnimTime1 = 1.2
-SWEP.WaitTime1 = 0.74
+SWEP.AnimTime1 = 1
+SWEP.WaitTime1 = 0.55
 
 SWEP.AnimTime2 = 0.7
 SWEP.WaitTime2 = 0.4

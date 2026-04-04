@@ -27,7 +27,7 @@ if CLIENT then
 end
 
 SWEP.DamageType = DMG_SLASH
-SWEP.DamagePrimary = 28
+SWEP.DamagePrimary = 27
 SWEP.NeckBreakChance = 0.04
 SWEP.DamageSecondary = 12
 

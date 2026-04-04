@@ -51,10 +51,10 @@ SWEP.weaponPos = Vector(0,5,0)
 SWEP.weaponAng = Angle(90,0,0)
 
 SWEP.DamageType = DMG_SLASH
-SWEP.DamagePrimary = 32
+SWEP.DamagePrimary = 29
 SWEP.DamageSecondary = 3
-SWEP.BleedMultiplier = 1.5
-SWEP.PainMultiplier = 1.26
+SWEP.BleedMultiplier = 1.25
+SWEP.PainMultiplier = 1.15
 
 SWEP.PenetrationPrimary = 3
 SWEP.PenetrationSecondary = 0
@@ -64,12 +64,12 @@ SWEP.MaxPenLen = 6
 SWEP.PenetrationSizePrimary = 1.5
 SWEP.PenetrationSizeSecondary = 0
 
-SWEP.StaminaPrimary = 27
+SWEP.StaminaPrimary = 28
 SWEP.StaminaSecondary = 10
 
 SWEP.AttackLen1 = 50
 SWEP.AttackLen2 = 35
-SWEP.weight = 1.2
+SWEP.weight = 1.35
 
 SWEP.AnimList = {
     ["idle"] = "Idle",

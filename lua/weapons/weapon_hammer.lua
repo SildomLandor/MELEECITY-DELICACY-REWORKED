@@ -102,17 +102,17 @@ function SWEP:ThinkAdd()
 	end
 	
 	if self:GetNetVar("AttackMode", 1) == 1 then
-		self.DamagePrimary = 15
+		self.DamagePrimary = 13
 		self.DamageType = DMG_CLUB
 		self.weaponPos = Vector(0, 0, -6.45)
 		self.weaponAng = Angle(-5, -90, 0)
 		self.PenetrationPrimary = 2
 		self.MaxPenLen = 1
-		self.PainMultiplier = 1.65
+		self.PainMultiplier = 1.15
 		self.PenetrationSizePrimary = 1
 		self.StaminaPrimary = 25
 	else
-		self.DamagePrimary = 15
+		self.DamagePrimary = 11
 		self.DamageType = DMG_SLASH
 		self.weaponPos = Vector(0, 0, -6.45)
 		self.weaponAng = Angle(0, 90, 0)

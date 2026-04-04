@@ -229,6 +229,7 @@ local assimilationMat = Material("effects/shaders/zb_assimilation")
 local coldMat = Material("effects/shaders/zb_colda")
 local grainMat = Material("effects/shaders/zb_grain2")
 local heatMat = Material("effects/shaders/zb_heat")
+local blindMat = Material("effects/shaders/zb_blind")
 local zombMat = grainMat -- Material("effects/shaders/zb_zomb")
 
 local PainLerp = 0
@@ -346,6 +347,19 @@ hook.Add("Post Post Processing", "ItHurts", function()
 	if not organism then stopthings() return end
 	if not organism.brain then stopthings() return end
 	local org = organism
+
+	if org.blindness or amtflashed >= 0.8 then
+		local blindness = ((org.blindness and math.Round(org.blindness) == 0) or amtflashed >= 0.8) and 0 or (org.blindness)
+		render.UpdateScreenEffectTexture()
+		render.UpdateFullScreenDepthTexture()
+		
+		blindMat:SetFloat("$c0_x", 5)
+		blindMat:SetFloat("$c0_y", CurTime())
+		blindMat:SetFloat("$c0_z", math.Round(blindness))
+	
+		render.SetMaterial(blindMat)
+		render.DrawScreenQuad()
+	end
 	
 	if !IsValid(PainStation) or PainStation:GetState() != GMOD_CHANNEL_PLAYING then
 		sound.PlayFile("sound/zbattle/pain_beat.ogg", "noblock noplay", function(station)
@@ -732,6 +746,46 @@ hook.Add("Player Spawn", "ItDoesntNow", function(ply)
 	if ply != lply then return end
 
 	stopthings()
+end)
+
+local function removeflash()
+	if IsValid(lply.blindflash) then
+		lply.blindflash:Remove()
+	end
+end
+
+hook.Add("PreDrawOpaqueRenderables", "renderblindnessflash", function()
+	local spect = IsValid(lply:GetNWEntity("spect")) and lply:GetNWEntity("spect")
+	
+	if !lply:Alive() and !IsValid(spect) then removeflash() return end
+	if !lply:Alive() and viewmode != 1 then removeflash() return end
+
+	local organism = lply:Alive() and lply.organism or (IsValid(spect) and spect.organism)
+	if not organism or isbool(organism) then return end
+
+	if !(organism.blindness or (amtflashed or 0) >= 0.8) then removeflash() return end
+	local blindness = ((organism.blindness and math.Round(organism.blindness) == 0) or amtflashed >= 0.8) and 0 or (organism.blindness)
+
+	local eyesmode = math.Round(blindness)
+	
+	local view = render.GetViewSetup(true)
+	
+	if not IsValid(lply.blindflash) then
+		lply.blindflash = ProjectedTexture()
+		lply.blindflash:SetTexture("effects/flashlight001")
+		lply.blindflash:SetEnableShadows(false)
+		lply.blindflash:SetConstantAttenuation(.1)
+	end
+	
+	local Ang = view.angles
+	Ang[2] = Ang[2] + (eyesmode == 2 and 90 or eyesmode == 1 and -90 or 0)
+	Ang[1] = eyesmode == 0 and Ang[1] or 0
+	lply.blindflash:SetFarZ(40)
+	lply.blindflash:SetFOV(160)
+	lply.blindflash:SetBrightness(1)
+	lply.blindflash:SetPos(view.origin)
+	lply.blindflash:SetAngles(Ang)
+	lply.blindflash:Update()
 end)
 
 local function GetConsciousBeatPulse()

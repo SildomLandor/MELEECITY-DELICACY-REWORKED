@@ -36,7 +36,7 @@ SWEP.weaponAng = Angle(0,0,-90)
 SWEP.modelscale = 1.15
 
 SWEP.DamageType = DMG_CLUB
-SWEP.DamagePrimary = 20
+SWEP.DamagePrimary = 19
 SWEP.DamageSecondary = 13
 
 SWEP.PenetrationPrimary = 1

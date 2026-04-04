@@ -4,6 +4,7 @@ local VectorRand = VectorRand
 local Angle = Angle
 
 local CHANCE, FORCE, VIBRATION = 0.35, 1200, 150
+local POSTURING_PARTIAL_UPPER_CHANCE = 0.4
 local posturingDur, rigorDur, seizureDur = {5, 10}, {8, 14}, {10, 20}
 local RIGOR_DAMP = 8
 local INSTANT_KO_WINDOW = 0.35
@@ -95,6 +96,7 @@ local function applySpasm(rag, stype, useFencing)
 	rag.spasm, rag.spasmType, rag.spasmDur, rag.spasmForce = true, stype, dur, FORCE
 	rag.spasmEnd, rag.spasmStart = CurTime() + dur, CurTime()
 	rag.spasmFencing = useFencing and true or nil
+	rag.spasmUpperBodyOnly = (stype == "posturing" and math_random() < POSTURING_PARTIAL_UPPER_CHANCE) and true or nil
 	
 	if stype == "rigor" then
 		rag.rigorActive = true
@@ -201,10 +203,12 @@ local function processPosturing(rag, fade)
 		shadowControl(rag, 6, ss, ang, mul, damp, vector_zero, 0, 0)
 		shadowControl(rag, 7, ss, ang, mul, damp, vector_zero, 0, 0)
 	end
-	shadowControl(rag, 8, ss, ang, mul, damp, vector_zero, 0, 0)
-	shadowControl(rag, 9, ss, ang, mul, damp, vector_zero, 0, 0)
-	shadowControl(rag, 11, ss, ang, mul, damp, vector_zero, 0, 0)
-	shadowControl(rag, 12, ss, ang, mul, damp, vector_zero, 0, 0)
+	if not rag.spasmUpperBodyOnly then
+		shadowControl(rag, 8, ss, ang, mul, damp, vector_zero, 0, 0)
+		shadowControl(rag, 9, ss, ang, mul, damp, vector_zero, 0, 0)
+		shadowControl(rag, 11, ss, ang, mul, damp, vector_zero, 0, 0)
+		shadowControl(rag, 12, ss, ang, mul, damp, vector_zero, 0, 0)
+	end
 end
 
 local function processRigor(rag, fade)
@@ -312,7 +316,7 @@ local function clearSpasm(rag)
 		if IsValid(phys) then phys:SetDamping(0.5, 1) end
 	end
 	applyFingerCurl(rag, 0)
-	rag.spasm, rag.spasmEnd, rag.spasmStart, rag.spasmDur, rag.spasmForce, rag.spasmType, rag.rigorActive, rag.spasmStiffness, rag.spasmFingerBlend, rag.spasmWear, rag.spasmBreathAt, rag.spasmBreathPlayed, rag.spasmFencing = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
+	rag.spasm, rag.spasmEnd, rag.spasmStart, rag.spasmDur, rag.spasmForce, rag.spasmType, rag.rigorActive, rag.spasmStiffness, rag.spasmFingerBlend, rag.spasmWear, rag.spasmBreathAt, rag.spasmBreathPlayed, rag.spasmFencing, rag.spasmUpperBodyOnly = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
 end
 
 hook.Add("Should Fake Up", "BrainfuckFencing", function(ply)

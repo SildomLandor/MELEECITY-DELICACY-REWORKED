@@ -22,8 +22,6 @@ SWEP.CanSuicide = true
 SWEP.SuicideNoLH = false
 SWEP.SuicideHoldType = "slam"
 
-SWEP.Weight = 0
-SWEP.weight = 2.5
 
 SWEP.HoldType = "pistol"
 
@@ -48,7 +46,7 @@ SWEP.sprint_ang = Angle(15,0,0)
 
 SWEP.basebone = 94
 
-SWEP.weaponPos = Vector(8.5,0,-2)
+SWEP.weaponPos = Vector(9,0,-2)
 SWEP.weaponAng = Angle(0,-90,76)
 
 SWEP.AnimList = {
@@ -59,7 +57,7 @@ SWEP.AnimList = {
 }
 
 SWEP.DamageType = DMG_SLASH
-SWEP.DamagePrimary = 40
+SWEP.DamagePrimary = 38
 SWEP.NeckBreakChance = 0.01
 SWEP.DamageSecondary = 14
 
@@ -71,7 +69,7 @@ SWEP.MaxPenLen = 10
 SWEP.PenetrationSizePrimary = 5.5
 SWEP.PenetrationSizeSecondary = 1.5
 
-SWEP.StaminaPrimary = 40
+SWEP.StaminaPrimary = 38
 SWEP.StaminaSecondary = 15
 
 SWEP.AttackLen1 = 55
@@ -135,7 +133,7 @@ SWEP.HeavyAttackSwingAng = 90 -- Custom swing angle for heavy attack
 SWEP.HeavyAttackRads = 95 -- Custom radius/arc for heavy attack
 
 SWEP.HeavyAttackWeaponAng = Angle(-57, -90, 76) -- Configure this angle for heavy attack phase
-SWEP.DefaultWeaponAng = Angle(0, -90, 76) -- Default angle (should match SWEP.weaponAng)
+SWEP.DefaultWeaponAng = Angle(0,-90,76) -- Default angle (should match SWEP.weaponAng)
 SWEP.HeavyAttackWeaponAngTransitionSpeed = 10 -- Speed of the smooth transition
 
 

@@ -187,12 +187,14 @@ local gunmanMixedWeapons = {
 	"weapon_px4beretta",
 	"weapon_remington870",
 	"weapon_kar98",
+	"weapon_mosin",
 }
 
 local gunmanWeaponAttachments = {
 	["weapon_px4beretta"] = {"supressor4"},
 	["weapon_remington870"] = {"supressor5","holo1","holo2","holo15"},
 	["weapon_kar98"] = {"optic12"},
+	["weapon_mosin"] = {},
 }
 
 local function GiveMixedGunmanWeapon(ply)
@@ -321,8 +323,11 @@ MODE.Types.standard = {
 		ply:Give("weapon_traitor_poison3")
 		ply:Give("weapon_traitor_poison_consumable")
 		ply:Give("weapon_traitor_suit")
-		local wep = ply:Give("weapon_zoraki")
-		timer.Simple(1,function() wep:ApplyAmmoChanges(2) end)
+		local wep = ply:Give("weapon_pl15")
+		if IsValid(wep) then
+			hg.AddAttachmentForce(ply, wep, "supressor4")
+			ply:GiveAmmo(wep:GetMaxClip1(), wep:GetPrimaryAmmoType(), true)
+		end
 
 		ply.organism.stamina.range = 220
 
@@ -532,8 +537,11 @@ MODE.Types.gunfreezone = {
 		ply:Give("weapon_traitor_poison_consumable")
 		ply:Give("weapon_traitor_suit")
 
-		local wep = ply:Give("weapon_zoraki")
-		timer.Simple(1,function() wep:ApplyAmmoChanges(2) end)
+		local wep = ply:Give("weapon_pl15")
+		if IsValid(wep) then
+			hg.AddAttachmentForce(ply, wep, "supressor4")
+			ply:GiveAmmo(wep:GetMaxClip1(), wep:GetPrimaryAmmoType(), true)
+		end
 
 		ply.organism.stamina.range = 220
 
@@ -736,6 +744,9 @@ function MODE:Intermission()
 
 	MODE.TraitorExpectedAmt = traitors_needed
 	local traitors = {}
+	local current_round_index = (tonumber(MODE.TraitorSelectionRoundIndex) or 0) + 1
+	MODE.TraitorSelectionRoundIndex = current_round_index
+	local main_traitor
 
 	-- local players = {}
 	-- for i, ply in player.Iterator() do
@@ -746,37 +757,122 @@ function MODE:Intermission()
 	
 	-- -- potom
 	
-	for i, ply in RandomPairs(player.GetAll()) do
+	MODE.NextRoundMainTraitors = MODE.NextRoundMainTraitors or {}
+	for _, ply in RandomPairs(player.GetAll()) do
 		if ply.isTraitor or ply:Team() == TEAM_SPECTATOR then continue end
-		if math.random(100) > (ply.Karma or 100) then continue end
+		if not MODE.NextRoundMainTraitors[ply:SteamID()] then continue end
+		if traitors_needed <= 0 then break end
 
-		if traitors_needed > 0 then
-			ply.isTraitor = true
-			traitors_needed = traitors_needed - 1
-			traitors[#traitors + 1] = ply
-		end
+		ply.isTraitor = true
+		traitors_needed = traitors_needed - 1
+		traitors[#traitors + 1] = ply
+
+		main_traitor = ply
+		ply.MainTraitor = true
+		MODE.NextRoundMainTraitors[ply:SteamID()] = nil
+
+		ply:SetPData("zb_hmcd_last_traitor_round_index", current_round_index)
+		ply:SetPData("zb_hmcd_total_traitor_rounds", tonumber(ply:GetPData("zb_hmcd_total_traitor_rounds", 0)) + 1)
 	end
 
-	//MODE.NextRoundMainTraitors = MODE.NextRoundMainTraitors or {}
-	for i, ply in RandomPairs(player.GetAll()) do
-		if ply.isTraitor or ply:Team() == TEAM_SPECTATOR then continue end
-		//if not MODE.NextRoundMainTraitors[ply:SteamID()] then continue end
+	if traitors_needed > 0 then
+		local eligible = {}
+		local total_traitor_rounds = 0
 
-		if traitors_needed > 0 then
-			ply.isTraitor = true
-			traitors_needed = traitors_needed - 1
-			traitors[#traitors + 1] = ply
+		for _, ply in ipairs(player.GetAll()) do
+			if ply.isTraitor or ply:Team() == TEAM_SPECTATOR then continue end
+
+			local rounds_played = tonumber(ply:GetPData("zb_hmcd_total_traitor_rounds", 0)) or 0
+			total_traitor_rounds = total_traitor_rounds + rounds_played
+			eligible[#eligible + 1] = {player = ply, rounds_played = rounds_played}
+		end
+
+		local average_traitor_rounds = (#eligible > 0) and (total_traitor_rounds / #eligible) or 0
+
+		for _, entry in ipairs(eligible) do
+			local ply = entry.player
+			local weight = 100
+
+			local last_traitor_round_index = tonumber(ply:GetPData("zb_hmcd_last_traitor_round_index", 0)) or 0
+			local rounds_since_traitor = (last_traitor_round_index > 0) and (current_round_index - last_traitor_round_index) or 999
+
+			if rounds_since_traitor <= 1 then
+				weight = weight * 0.03
+			elseif rounds_since_traitor <= 2 then
+				weight = weight * 0.12
+			elseif rounds_since_traitor <= 4 then
+				weight = weight * 0.45
+			end
+
+			if entry.rounds_played < average_traitor_rounds then
+				weight = weight * (1 + math.min((average_traitor_rounds - entry.rounds_played) * 0.25, 1.5))
+			elseif entry.rounds_played > average_traitor_rounds then
+				weight = weight * (1 - math.min((entry.rounds_played - average_traitor_rounds) * 0.1, 0.6))
+			end
+
+			local karma = ply.Karma or 100
+			if karma < 50 then
+				weight = weight * 0.75
+			elseif karma < 80 then
+				weight = weight * 0.9
+			end
+
+			entry.weight = math.max(weight, 5)
+		end
+
+		while traitors_needed > 0 and #eligible > 0 do
+			local total_weight = 0
+			for _, entry in ipairs(eligible) do
+				total_weight = total_weight + entry.weight
+			end
+
+			if total_weight <= 0 then break end
+
+			local random_value = math.Rand(0, total_weight)
+			local accumulated = 0
+			local selected_index = 1
+
+			for i, entry in ipairs(eligible) do
+				accumulated = accumulated + entry.weight
+				if random_value <= accumulated then
+					selected_index = i
+					break
+				end
+			end
+
+			local selected = table.remove(eligible, selected_index)
+			if selected and IsValid(selected.player) then
+				local ply = selected.player
+				ply.isTraitor = true
+				traitors_needed = traitors_needed - 1
+				traitors[#traitors + 1] = ply
+
+				ply:SetPData("zb_hmcd_last_traitor_round_index", current_round_index)
+				ply:SetPData("zb_hmcd_total_traitor_rounds", tonumber(ply:GetPData("zb_hmcd_total_traitor_rounds", 0)) + 1)
+
+				if not main_traitor then
+					main_traitor = ply
+					ply.MainTraitor = true
+				end
+			end
 		end
 	end
 
 	if traitors_needed > 0 then
-		for i, ply in RandomPairs(player.GetAll()) do
+		for _, ply in RandomPairs(player.GetAll()) do
 			if ply.isTraitor or ply:Team() == TEAM_SPECTATOR then continue end
+			if traitors_needed <= 0 then break end
 
-			if traitors_needed > 0 then
-				ply.isTraitor = true
-				traitors_needed = traitors_needed - 1
-				traitors[#traitors + 1] = ply
+			ply.isTraitor = true
+			traitors_needed = traitors_needed - 1
+			traitors[#traitors + 1] = ply
+
+			ply:SetPData("zb_hmcd_last_traitor_round_index", current_round_index)
+			ply:SetPData("zb_hmcd_total_traitor_rounds", tonumber(ply:GetPData("zb_hmcd_total_traitor_rounds", 0)) + 1)
+
+			if not main_traitor then
+				main_traitor = ply
+				ply.MainTraitor = true
 			end
 		end
 	end
@@ -786,7 +882,7 @@ function MODE:Intermission()
 			traitor.MainTraitor = false
 		end
 
-		local main_traitor = table.Random(traitors)
+		main_traitor = main_traitor or table.Random(traitors)
 		if IsValid(main_traitor) then
 			main_traitor.MainTraitor = true
 		end
