@@ -331,6 +331,28 @@ local function ApplyLoadout(ply)
 	if hasP22ExtraMag or hasP22Silencer then
 		local extraMagApplied = false
 
+		local function tryGiveP22ExtraMagAmmo(wep)
+			if not IsValid(wep) then return false end
+
+			local reserveAmount = wep:GetMaxClip1()
+			if not isnumber(reserveAmount) or reserveAmount <= 0 then
+				reserveAmount = (wep.Primary and wep.Primary.ClipSize) or 0
+			end
+			if reserveAmount <= 0 then return false end
+
+			local ammoType = wep:GetPrimaryAmmoType()
+			if not isnumber(ammoType) or ammoType < 0 then
+				local ammoName = wep.Primary and wep.Primary.Ammo
+				if isstring(ammoName) and ammoName ~= "" then
+					ammoType = game.GetAmmoID(ammoName)
+				end
+			end
+			if not isnumber(ammoType) or ammoType < 0 then return false end
+
+			ply:GiveAmmo(reserveAmount, ammoType, true)
+			return true
+		end
+
 		local function ensureP22Suppressor(wep)
 			if not IsValid(wep) or not wep.attachments or not wep.availableAttachments then return false end
 			if wep.attachments.barrel and istable(wep.attachments.barrel) and wep.attachments.barrel[1] == "supressor4" then
@@ -367,8 +389,7 @@ local function ApplyLoadout(ply)
 		local function applyP22Addons(wep)
 			if not IsValid(wep) then return end
 			if hasP22ExtraMag and not extraMagApplied then
-				ply:GiveAmmo(wep:GetMaxClip1(), wep:GetPrimaryAmmoType(), true)
-				extraMagApplied = true
+				extraMagApplied = tryGiveP22ExtraMagAmmo(wep)
 			end
 			if hasP22Silencer then
 				ensureP22Suppressor(wep)

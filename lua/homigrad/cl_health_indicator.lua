@@ -244,6 +244,7 @@ hook.Add("HUDPaint", "HG_HealthIndicator", function()
     if org then
         if org.consciousness then consciousness = org.consciousness end
         if org.otrub then otrub = org.otrub end
+        if (org.despair or 0) > 0.35 then return end
     end
     
     local targetX = otrub and POS_HIDDEN_X or POS_VISIBLE_X

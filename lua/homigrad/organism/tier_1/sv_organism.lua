@@ -1,6 +1,7 @@
 --local Organism = hg.organism
 hg.organism.module = hg.organism.module or {}
 local module = hg.organism.module
+hg.despair_server_builtin = true
 hg.organism.lastindex = hg.organism.lastindex or 1000000
 hook.Add("Org Clear", "Main", function(org)
 	org.alive = true
@@ -72,6 +73,9 @@ hook.Add("Org Clear", "Main", function(org)
 
 	org.fear = 0
 	org.fearadd = 0
+	org.despair = 0
+	org._despairLastAdrenaline = 0
+	org._despairNextCorpseCheck = 0
 	--//
 
 	org.assimilated = 0
@@ -146,6 +150,7 @@ local function send_organism(org, ply)
 	sendtable.temperature = org.temperature
 	sendtable.canmove = org.canmove
 	sendtable.fear = org.fear
+	sendtable.despair = org.despair
 	sendtable.llegdislocation = org.llegdislocation
 	sendtable.rlegdislocation = org.rlegdislocation
 	sendtable.rarmdislocation = org.rarmdislocation
@@ -203,6 +208,7 @@ local function send_bareinfo(org)
 	sendtable.analgesia = org.analgesia
 	sendtable.o2 = org.o2
 	sendtable.timeValue = org.timeValue
+	sendtable.despair = org.despair
 	sendtable.superfighter = org.superfighter
 	sendtable.lungsfunction = org.lungsfunction
 	sendtable.lleg = org.lleg
@@ -290,6 +296,13 @@ local numerical = {
 	"Twenty."
 }
 
+local function is_despair_corpse(ent)
+	if not IsValid(ent) or not ent:IsRagdoll() then return false end
+	local owner = hg.RagdollOwner and hg.RagdollOwner(ent) or nil
+	if IsValid(owner) and owner:Alive() then return false end
+	return true
+end
+
 hook.Add("HomigradDamage", "Berserk", function(ply, dmgInfo, hitgroup, ent)
 	local attacker, victim = dmgInfo:GetAttacker(), ply
 	if !attacker or !IsValid(attacker) or (IsValid(attacker) and !attacker:IsPlayer()) then
@@ -309,6 +322,104 @@ hook.Add("HomigradDamage", "Berserk", function(ply, dmgInfo, hitgroup, ent)
 			attacker.organism.berserk = attacker.organism.berserk + 0.5
 		end
 	end)
+end)
+
+hook.Add("HomigradDamage", "DespairGain", function(ply, dmgInfo)
+	if not IsValid(ply) or not ply:IsPlayer() then return end
+	local org = ply.organism
+	if not org or org.otrub then return end
+	if (org.berserk or 0) > 0 or (org.noradrenaline or 0) > 0 then
+		org.despair = 0
+		return
+	end
+
+	local dmg = (dmgInfo and dmgInfo.GetDamage and dmgInfo:GetDamage()) or 0
+	if dmg <= 0 then return end
+
+	local add = math.Clamp(dmg / 700, 0.001, 0.025)
+	if dmgInfo and dmgInfo.IsDamageType and dmgInfo:IsDamageType(DMG_BULLET + DMG_BUCKSHOT + DMG_BLAST + DMG_BURN + DMG_SLASH + DMG_CLUB) then
+		add = add * 1.05
+	end
+
+	org.despair = math.min((org.despair or 0) + add, 1)
+end)
+
+hook.Add("EntityEmitSound", "DespairExplosionNearby", function(data)
+	local name = string.lower(data.SoundName or "")
+	if name == "" then return end
+	if not string.find(name, "explode", 1, true) and not string.find(name, "explosion", 1, true) then return end
+
+	local pos = data.Pos
+	if not pos or pos == vector_origin then
+		local ent = Entity(data.Entity or -1)
+		if not IsValid(ent) then return end
+		pos = ent:GetPos()
+	end
+
+	local now = CurTime()
+	for _, ply in ipairs(player.GetAll()) do
+		if not IsValid(ply) or not ply:Alive() then continue end
+		local org = ply.organism
+		if not org or org.otrub then continue end
+		if (org.berserk or 0) > 0 or (org.noradrenaline or 0) > 0 then
+			org.despair = 0
+			continue
+		end
+		if (org._despairNextExplosionEvent or 0) > now then continue end
+
+		local dist = ply:GetPos():Distance(pos)
+		if dist > 900 then continue end
+
+		local add = math.Clamp(1 - dist / 900, 0, 1) * 0.012
+		if add > 0 then
+			org.despair = math.min((org.despair or 0) + add, 1)
+			org._despairNextExplosionEvent = now + 0.25
+		end
+	end
+end)
+
+hook.Add("EntityFireBullets", "DespairNearBullets", function(ent, bulletData)
+	if not IsValid(ent) then return end
+	local src = bulletData and bulletData.Src
+	local dir = bulletData and bulletData.Dir
+	if not src or not dir then return end
+	if dir:LengthSqr() <= 0 then return end
+	dir = dir:GetNormalized()
+	local range = math.max(tonumber(bulletData.Distance) or 0, 1800)
+
+	local now = CurTime()
+	for _, ply in ipairs(player.GetAll()) do
+		if not IsValid(ply) or not ply:Alive() or ply == ent then continue end
+		local org = ply.organism
+		if not org or org.otrub then continue end
+		if (org.berserk or 0) > 0 or (org.noradrenaline or 0) > 0 then
+			org.despair = 0
+			continue
+		end
+		if (org._despairNextNearBullet or 0) > now then continue end
+
+		local eye = ply:EyePos()
+		local toEye = eye - src
+		local t = toEye:Dot(dir)
+		if t <= 0 or t >= range then continue end
+
+		local closest = src + dir * t
+		local dist = eye:Distance(closest)
+		if dist > 130 then continue end
+
+		local tr = util.TraceLine({
+			start = src,
+			endpos = eye,
+			filter = {ent, ply}
+		})
+		if tr.Hit and tr.Entity ~= ply then continue end
+
+		local add = math.Clamp(1 - dist / 130, 0, 1) * 0.008
+		if add > 0 then
+			org.despair = math.min((org.despair or 0) + add, 1)
+			org._despairNextNearBullet = now + 0.22
+		end
+	end
 end)
 
 hook.Add("Org Think", "Main", function(owner, org, timeValue)
@@ -420,6 +531,96 @@ hook.Add("Org Think", "Main", function(owner, org, timeValue)
 		org.noradrenalineActive = true
 	elseif org.noradrenaline <= 0 then
 		org.noradrenalineActive = false
+	end
+
+	if org.berserk > 0 or org.noradrenaline > 0 then
+		org.despair = 0
+		org._despairLastAdrenaline = org.adrenaline or 0
+		return
+	end
+
+	org.despair = math.Clamp(org.despair or 0, 0, 1)
+	local despairDecay = timeValue / 160
+	if org.despair > 0.35 then
+		despairDecay = timeValue / 360
+	end
+	org.despair = math.Approach(org.despair, 0, despairDecay)
+
+	local despairAdd = 0
+	local adrenaline = org.adrenaline or 0
+	local adrenalineAdd = org.adrenalineAdd or 0
+	local prevAdrenaline = org._despairLastAdrenaline or adrenaline
+	local adrenalineDelta = math.max(adrenaline - prevAdrenaline, 0)
+	org._despairLastAdrenaline = adrenaline
+
+	if adrenaline > 8 then
+		despairAdd = despairAdd + (adrenaline - 8) * timeValue * 0.003
+	end
+
+	if adrenalineAdd > 0.9 then
+		despairAdd = despairAdd + math.min(adrenalineAdd, 2) * timeValue * 0.002
+	end
+
+	if adrenalineDelta > 0 then
+		despairAdd = despairAdd + math.min(adrenalineDelta * 0.02, 0.004)
+	end
+
+	if (org.fear or 0) > 0 then
+		despairAdd = despairAdd + math.Clamp(org.fear, 0, 2) * timeValue * 0.003
+	end
+
+	if org.o2 and org.o2[1] then
+		local o2 = org.o2[1]
+		if o2 < 14 then
+			despairAdd = despairAdd + math.Clamp((14 - o2) / 14, 0, 1) * timeValue * 0.045
+		end
+
+		local curregen = org.o2.curregen or 0
+		local losing = org.losing_oxy or 0
+		if curregen < losing then
+			despairAdd = despairAdd + math.Clamp(losing - curregen, 0, 2) * timeValue * 0.008
+		end
+	end
+
+	local time = CurTime()
+	if isPly and isfunction(owner.GetAimVector) and isfunction(owner.EyePos) and (org._despairNextCorpseCheck or 0) <= time then
+		org._despairNextCorpseCheck = time + 0.35
+
+		local eyePos = owner:EyePos()
+		local aim = owner:GetAimVector()
+		local corpsesSeen = 0
+		local rag = owner.FakeRagdoll
+		local traceFilter = IsValid(rag) and {owner, rag} or owner
+
+		for _, ent in ipairs(ents.FindInCone(eyePos, aim, 1024, math.cos(math.rad(26)))) do
+			if ent == owner or ent == rag then continue end
+			if not is_despair_corpse(ent) then continue end
+
+			local tr = util.TraceLine({
+				start = eyePos,
+				endpos = ent:WorldSpaceCenter(),
+				filter = traceFilter
+			})
+
+			if tr.Entity == ent or not tr.Hit then
+				corpsesSeen = corpsesSeen + 1
+			end
+
+			if corpsesSeen >= 3 then break end
+		end
+
+		if corpsesSeen > 0 then
+			despairAdd = despairAdd + timeValue * 0.028 * corpsesSeen
+		end
+	end
+
+	if despairAdd > 0 then
+		despairAdd = math.min(despairAdd, timeValue * 0.03)
+		org.despair = math.min(org.despair + despairAdd, 1)
+	end
+
+	if org.despair >= 0.8 then
+		org.disorientation = math.max(org.disorientation or 0, 1)
 	end
 
 	if (org.llegamputated or org.rlegamputated) and org.berserk <= 0.3 then
