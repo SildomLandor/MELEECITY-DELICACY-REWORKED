@@ -7,7 +7,8 @@ local Selects = {
     {Title = "return", Func = function(luaMenu) luaMenu:Close() end},
     {Title = "main menu", Func = function(luaMenu) gui.ActivateGameUI() luaMenu:Close() end},
     {Title = "settings", Func = function(luaMenu) luaMenu:SwitchToSettings() end},
-    {Title = "discord", Func = function(luaMenu) luaMenu:Close() gui.OpenURL("https://discord.gg/ZXUCAwuke2")  end},
+    {Title = "discord (Lapse)", Func = function(luaMenu) luaMenu:Close() gui.OpenURL("https://discord.gg/ZXUCAwuke2")  end},
+    {Title = "discord (Re-City)", Func = function(luaMenu) luaMenu:Close() gui.OpenURL("https://discord.gg/er68Y7hz")  end},
     {Title = "achievements", Func = function(luaMenu) luaMenu:SwitchToAchievements() end},
     {Title = "appearance", Func = function(luaMenu) luaMenu:SwitchToAppearance() end},
     {Title = "traitor menu", GamemodeOnly = true, Func = function(luaMenu) luaMenu:SwitchToTraitorMenu() end},
@@ -114,12 +115,9 @@ local clr_verygray = Color(10,10,19,235)
 -- Global variable to persist music across menu opens
 ZCityMainMenuMusic = ZCityMainMenuMusic or nil
 ZCityAppearanceMusic = ZCityAppearanceMusic or nil
-ZCityIntroMusic = ZCityIntroMusic or nil
-ZCityHasSeenIntro = ZCityHasSeenIntro or false
 ZCityMenuMusicState = ZCityMenuMusicState or {
     mainTime = 0,
     appearanceTime = 0,
-    introTime = 0,
     lastRoundState = nil,
     pendingResume = false,
     pendingResumeTime = 0
@@ -140,12 +138,7 @@ local function ZCityCaptureMenuMusicTimes()
         end
     end
 
-    if IsValid(ZCityIntroMusic) then
-        local t = ZCityIntroMusic:GetTime()
-        if isnumber(t) and t >= 0 then
-            ZCityMenuMusicState.introTime = t
-        end
-    end
+
 end
 
 local function ZCityResumeMainMusic()
@@ -196,34 +189,10 @@ local function ZCityResumeAppearanceMusic()
     end)
 end
 
-local function ZCityResumeIntroMusic()
-    local seekTime = ZCityMenuMusicState.introTime or 0
 
-    if IsValid(ZCityIntroMusic) then
-        ZCityIntroMusic:Play()
-        if seekTime > 0 then
-            ZCityIntroMusic:SetTime(seekTime)
-        end
-        return
-    end
-
-    sound.PlayFile("sound/itbegins.mp3", "noblock", function(station)
-        if not IsValid(station) then return end
-        station:Play()
-        if seekTime > 0 then
-            station:SetTime(seekTime)
-        end
-        ZCityIntroMusic = station
-    end)
-end
 
 local function ZCityResumeActiveMenuMusic()
     if not IsValid(MainMenu) then return end
-
-    if MainMenu.IsIntro and MainMenu.IntroSequenceActive then
-        ZCityResumeIntroMusic()
-        return
-    end
 
     if MainMenu.CurrentState == "Appearance" or MainMenu.TargetState == "Appearance" then
         ZCityResumeAppearanceMusic()
@@ -297,7 +266,7 @@ function PANEL:Init()
     surface.SetFont("ZCity_Veteran")
     local widest = 0
     for _, v in ipairs(Selects) do
-        if v.GamemodeOnly and engine.ActiveGamemode() != "zcity" then continue end
+        if v.GamemodeOnly and engine.ActiveGamemode() ~= "zcity" then continue end
         local w = surface.GetTextSize(v.Title)
         if w > widest then
             widest = w
@@ -342,12 +311,10 @@ function PANEL:Init()
     self.menuList.PushStrong = ScreenScaleH(6)
     self.menuList.PushWeak = ScreenScaleH(3)
     
-    if self.IsIntro then
-        self.menuList:SetVisible(false)
-    end
+
     
     for k,v in ipairs(Selects) do
-        if v.GamemodeOnly and engine.ActiveGamemode() != "zcity" then continue end
+        if v.GamemodeOnly and engine.ActiveGamemode() ~= "zcity" then continue end
         self:AddSelect( self.menuList, v.Title, v )
     end
     self.menuList.PerformLayout = function(panel)
@@ -511,11 +478,7 @@ function PANEL:Think()
             if IsValid(self.TraitorPresetsPanel) then self.TraitorPresetsPanel:SetVisible(false) end
         elseif self.CurrentState == "Main" then
             if IsValid(self.menuList) then 
-                if not self.IsIntro then
-                    self.menuList:SetVisible(true) 
-                else
-                    self.menuList:SetVisible(false)
-                end
+                self.menuList:SetVisible(true) 
             end
             if IsValid(self.SettingsList) then self.SettingsList:SetVisible(false) end
             if IsValid(self.AppearancePanel) then self.AppearancePanel:SetVisible(false) end
@@ -605,21 +568,17 @@ function PANEL:Think()
     
     -- Alpha handling for buttons during transition
     if IsValid(self.menuList) then
-        if self.IsIntro then
-            self.menuList:SetVisible(false)
-        else
-            if self.TargetState == "Settings" or self.TargetState == "Appearance" or self.TargetState == "Achievements" or self.TargetState == "TraitorMenu" or self.TargetState == "TraitorPresets" then
-                if self.CurrentState ~= "Main" then
-                    self.menuList:SetAlpha(255)
-                    self.menuList:SetVisible(false)
-                else
-                    self.menuList:SetAlpha(255)
-                    -- Don't hide it, let it move offscreen
-                end
-            elseif self.TargetState == "Main" then
-                self.menuList:SetVisible(true)
+        if self.TargetState == "Settings" or self.TargetState == "Appearance" or self.TargetState == "Achievements" or self.TargetState == "TraitorMenu" or self.TargetState == "TraitorPresets" then
+            if self.CurrentState ~= "Main" then
                 self.menuList:SetAlpha(255)
+                self.menuList:SetVisible(false)
+            else
+                self.menuList:SetAlpha(255)
+                -- Don't hide it, let it move offscreen
             end
+        elseif self.TargetState == "Main" then
+            self.menuList:SetVisible(true)
+            self.menuList:SetAlpha(255)
         end
     end
     
@@ -2336,7 +2295,6 @@ function PANEL:Paint(w,h)
         end
         
         local mat = BgMat
-        if self.IsIntro then mat = EyeMat end
 
         if not mat:IsError() then
             surface.SetMaterial( mat )
@@ -2551,58 +2509,7 @@ function PANEL:Paint(w,h)
     surface.SetTextPos(self.LogoX + textShakeX, titleY + textShakeY)
     surface.DrawText(text1)
     
-    if self.IsIntro then
-        local enterText = "press enter"
-        surface.SetFont("ZCity_Veteran")
-        local tw, th = surface.GetTextSize(enterText)
-        local tx = w - tw - ScreenScale(20)
-        local ty = h - th - ScreenScale(20)
-        
-        -- Blink logic
-        local blinkSpeed = 2
-        local alpha = math.abs(math.sin(CurTime() * blinkSpeed)) * 255
-        
-        surface.SetTextColor(255, 0, 0, alpha)
-        surface.SetTextPos(tx, ty)
-        surface.DrawText(enterText)
-        
-        -- Intro Sequence Fade to Black
-        if self.IntroSequenceActive then
-            local elapsedTime = CurTime() - self.IntroStartTime
-            local duration = 3 -- Fade out duration
-            local fadeAlpha = math.Clamp((elapsedTime / duration) * 255, 0, 255)
-            
-            surface.SetDrawColor(0, 0, 0, fadeAlpha)
-            surface.DrawRect(0, 0, w, h)
-            
-            if elapsedTime >= duration then
-                self:Close()
-                
-                -- Create Fade Out Panel (Black -> Clear)
-                local fadePanel = vgui.Create("DPanel")
-                fadePanel:SetSize(ScrW(), ScrH())
-                fadePanel:MakePopup()
-                fadePanel:SetKeyboardInputEnabled(false)
-                fadePanel:SetMouseInputEnabled(false)
-                fadePanel.StartTime = CurTime()
-                fadePanel.Duration = 3
-                
-                function fadePanel:Paint(pw, ph)
-                    local et = CurTime() - self.StartTime
-                    local a = 255 - math.Clamp((et / self.Duration) * 255, 0, 255)
-                    surface.SetDrawColor(0, 0, 0, a)
-                    surface.DrawRect(0, 0, pw, ph)
-                    
-                    if et >= self.Duration then
-                        self:Remove()
-                    end
-                end
-                
-                -- Mark intro as seen
-                ZCityHasSeenIntro = true
-            end
-        end
-    end
+
 end
 
 function PANEL:AddSelect( pParent, strTitle, tbl )
@@ -2711,9 +2618,6 @@ hook.Add("OnPauseMenuShow","OpenMainMenu",function()
     end
 
     if MainMenu and IsValid(MainMenu) then
-        if MainMenu.IsIntro then
-            return false -- Prevent closing intro menu with ESC
-        end
         MainMenu:Close()
         MainMenu = nil
         return false
@@ -2722,75 +2626,4 @@ hook.Add("OnPauseMenuShow","OpenMainMenu",function()
     MainMenu = vgui.Create("ZMainMenu")
     MainMenu:MakePopup()
     return false
-end)
-
-
-hook.Add("InitPostEntity", "ZCityOpenIntroMenu", function()
-    -- Use a timer to ensure everything is fully loaded before opening
-    timer.Simple(1, function()
-        if not ZCityHasSeenIntro then
-            -- Open the menu automatically on join
-            if MainMenu and IsValid(MainMenu) then MainMenu:Remove() end
-            MainMenu = vgui.Create("ZMainMenu")
-            MainMenu:MakePopup()
-            -- Force intro state
-            MainMenu.IsIntro = true
-            MainMenu:SetAlpha(255) -- Force visible immediately
-        end
-    end)
-end)
-
--- Force open on file refresh for testing (if not seen intro)
-timer.Simple(0.1, function()
-    if not ZCityHasSeenIntro and (not MainMenu or not IsValid(MainMenu)) then
-        MainMenu = vgui.Create("ZMainMenu")
-        MainMenu:MakePopup()
-        MainMenu.IsIntro = true
-        MainMenu:SetAlpha(255)
-    end
-end)
-hook.Add("OnPauseMenuShow","OpenMainMenu",function()
-    local run = hook.Run("OnShowZCityPause")
-    if run then
-        return run
-    end
-
-    if MainMenu and IsValid(MainMenu) then
-        if MainMenu.IsIntro then
-            return false -- Prevent closing intro menu with ESC
-        end
-        MainMenu:Close()
-        MainMenu = nil
-        return false
-    end
-
-    MainMenu = vgui.Create("ZMainMenu")
-    MainMenu:MakePopup()
-    return false
-end)
-
-
-hook.Add("InitPostEntity", "ZCityOpenIntroMenu", function()
-    -- Use a timer to ensure everything is fully loaded before opening
-    timer.Simple(1, function()
-        if not ZCityHasSeenIntro then
-            -- Open the menu automatically on join
-            if MainMenu and IsValid(MainMenu) then MainMenu:Remove() end
-            MainMenu = vgui.Create("ZMainMenu")
-            MainMenu:MakePopup()
-            -- Force intro state
-            MainMenu.IsIntro = true
-            MainMenu:SetAlpha(255) -- Force visible immediately
-        end
-    end)
-end)
-
--- Force open on file refresh for testing (if not seen intro)
-timer.Simple(0.1, function()
-    if not ZCityHasSeenIntro and (not MainMenu or not IsValid(MainMenu)) then
-        MainMenu = vgui.Create("ZMainMenu")
-        MainMenu:MakePopup()
-        MainMenu.IsIntro = true
-        MainMenu:SetAlpha(255)
-    end
 end)
