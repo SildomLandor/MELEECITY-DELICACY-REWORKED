@@ -555,7 +555,7 @@ hook.Add("PostCleanupMap", "RTScleanup", function()
     end
 end)
 
-hook.Add("OnEntityCreated", "CoopAlyxWeapon", function(ent)
+--[[hook.Add("OnEntityCreated", "CoopAlyxWeapon", function(ent)
     if CurrentRound().name ~= "coop" then return end
     
     timer.Simple(0, function()
@@ -573,4 +573,4 @@ hook.Add("OnEntityCreated", "CoopAlyxWeapon", function(ent)
             ent:Give("weapon_pl15")
         end)
     end)
-end)
+end)]]-- nuh uh!!
