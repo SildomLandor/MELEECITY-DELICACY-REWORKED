@@ -71,7 +71,7 @@ local dislocated_leg = {
 
 local function legs(org, bone, dmg, dmgInfo, key, boneindex, dir, hit, ricochet)
 	local oldDmg = org[key]
-	local dmg = dmg * 4
+	local dmg = dmg * 3.25
 
 	if dmgInfo:IsDamageType(DMG_CRUSH) and dmg > 4 and !org[key.."amputated"] then
 		hg.organism.AmputateLimb(org, key)
@@ -87,7 +87,7 @@ local function legs(org, bone, dmg, dmgInfo, key, boneindex, dir, hit, ricochet)
 	
 	org[key] = org[key] * 0.5
 
-	if dmg < 0.7 then return 0 end
+	if dmg < 0.8 then return 0 end
 	if dmg < 1 and !dmgInfo:IsDamageType(DMG_CLUB+DMG_CRUSH+DMG_FALL) then return 0 end
 
 	if org.isPly and !org[key.."amputated"] then org.just_damaged_bone = CurTime() end
@@ -128,7 +128,7 @@ end
 
 local function arms(org, bone, dmg, dmgInfo, key, boneindex, dir, hit, ricochet)
 	local oldDmg = org[key]
-	local dmg = dmg * 4
+	local dmg = dmg * 3.25
 	
 	if dmgInfo:IsDamageType(DMG_CRUSH) and dmg > 4 and !org[key.."amputated"] then
 		hg.organism.AmputateLimb(org, key)
@@ -144,7 +144,7 @@ local function arms(org, bone, dmg, dmgInfo, key, boneindex, dir, hit, ricochet)
 	
 	org[key] = org[key] * 0.5
 
-	if dmg < 0.6 then return 0 end
+	if dmg < 0.75 then return 0 end
 	if dmg < 1 and !dmgInfo:IsDamageType(DMG_CLUB+DMG_CRUSH+DMG_FALL) then return 0 end
 
 	if org.isPly and !org[key.."amputated"] then org.just_damaged_bone = CurTime() end
@@ -251,7 +251,7 @@ input_list.jaw = function(org, bone, dmg, dmgInfo, boneindex, dir, hit, ricochet
 
 	if org.jaw == 1 and (org.jaw - oldDmg) > 0 and org.isPly then org.owner:Notify(jaw_broken_msg[math.random(#jaw_broken_msg)], true, "jaw", 2) end
 
-	local dislocated = (org.jaw - oldDmg) > math.Rand(0.1, 0.3)
+	local dislocated = (org.jaw - oldDmg) > math.Rand(0.2, 0.4)
 
 	if org.jaw == 1 then
 		org.shock = org.shock + dmg * 40

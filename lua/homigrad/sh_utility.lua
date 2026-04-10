@@ -1277,6 +1277,9 @@ local IsValid = IsValid
 		if not org.rarmamputated and ((org.rarm or 0) >= 1 or org.rarmdislocation) then
 			extra = extra + 4
 		end
+		if (org.spine1 or 0) >= (hg.organism and hg.organism.fake_spine1 or 1) or (org.spine2 or 0) >= (hg.organism and hg.organism.fake_spine2 or 1) then
+			extra = extra + 20
+		end
 
 		return extra
 	end

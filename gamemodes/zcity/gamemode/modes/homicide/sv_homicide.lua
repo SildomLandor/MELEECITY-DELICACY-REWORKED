@@ -47,6 +47,7 @@ MODE.LootTable = {
 	}},
 	{20,{
 		{12,"weapon_hammer"},
+		{2,"weapon_wrench"},
 		{6,"weapon_brick"},
 		{10,"weapon_pocketknife"},
 
@@ -58,6 +59,7 @@ MODE.LootTable = {
 		{2,"weapon_hg_crowbar"},
 		{1,"weapon_hatchet"},
 		{0.9,"weapon_hg_axe"},
+		{0.9,"weapon_hg_katana"},
 		{0.5,"weapon_hg_machete"},
 		{0.4,"weapon_hg_sledgehammer"},
 
@@ -146,6 +148,7 @@ MODE.LootTableStandard = {
 	{35, {
 		{1,"weapon_hammer"},
 		{1,"weapon_brick"},
+		{0.45,"weapon_wrench"},
 		{1,"weapon_pocketknife"},
 		{0.32,"weapon_bat"},
 		{0.3,"weapon_leadpipe"},
@@ -155,6 +158,7 @@ MODE.LootTableStandard = {
 
 		{0.12,"weapon_hatchet"},
 		{0.10,"weapon_hg_axe"},
+		{0.03,"weapon_hg_katana"},
 		{0.09,"weapon_hg_sledgehammer"},
 		{0.07,"weapon_hg_machete"},
 	}},

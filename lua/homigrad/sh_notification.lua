@@ -160,7 +160,7 @@ if CLIENT then
 		table.insert(hg.notifications, {msg, (showTimer or defaultShowTimer), clr or Color(255, 255, 255, 255)})
 	end
 
-	local function CreateNotificationBerserk(msg, showTimer, clr)
+	local function CreateNotificationBerserk(msg, showTimer, clr, noChatPrint)
 		if hg_furcity:GetBool() or lply.PlayerClassName == "furry" then
 			msg = hg.FurrifyPhrase(msg) -- uhhhh... hate to break it to you but-
 		end
@@ -168,7 +168,7 @@ if CLIENT then
 		local tbl = hg.currentNotification
 
 		local clr = tbl and tbl[4] and IsColor(tbl[4]) and tbl[4] or Color(255, 255, 255, 255)
-		if tbl and clr and tbl[1] then
+		if not noChatPrint and tbl and clr and tbl[1] then
 			chat.AddText(Color(clr.r, clr.g, clr.b, 255), (last_message or tbl[1]).."\n")
 		end
 
@@ -200,10 +200,11 @@ if CLIENT then
 	net.Receive("HGNotificateBerserk",function()
 		local msg = net.ReadString()
 		local clr = net.ReadColor()
+		local noChatPrint = net.ReadBool()
 
 		if msg == "" then return end
 
-		CreateNotificationBerserk(msg, showtime, clr)
+		CreateNotificationBerserk(msg, showtime, clr, noChatPrint)
 	end)
 
 	hg.CreateNotification = CreateNotification

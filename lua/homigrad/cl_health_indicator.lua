@@ -253,7 +253,7 @@ local function CollectAfflictionIcons(ply, org)
     local hasAmputation = org.llegamputated or org.rlegamputated or org.larmamputated or org.rarmamputated or org.headamputated
     if hasBrokenLimb or hasDislocation or hasAmputation then
         local sev = hasAmputation and 1 or (hasDislocation and 0.65 or 0.5)
-        add("broken", sev)
+        add("vuln", sev)
     end
 
     local concussion = GetOrgValueNumber(org.concussion)

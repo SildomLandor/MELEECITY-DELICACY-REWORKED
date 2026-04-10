@@ -15,7 +15,7 @@ SWEP.ViewModel = ""
 
 SWEP.HoldType = "revolver"
 
-SWEP.weight = 3.5
+SWEP.weight = 3.5 
 
 SWEP.HoldPos = Vector(-14,-2,1)
 SWEP.HoldAng = Angle(0,0,0)

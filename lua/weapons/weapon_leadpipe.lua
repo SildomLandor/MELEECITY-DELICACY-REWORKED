@@ -122,7 +122,7 @@ SWEP.SwingAng2 = 0
 
 SWEP.MinSensivity = 0.5
 
-SWEP.BlockTier = 2
+SWEP.BlockTier = 3
 SWEP.MeleeMaterial = "metal"
 SWEP.BlockImpactSound = "physics/metal/metal_solid_impact_bullet1.wav"
 

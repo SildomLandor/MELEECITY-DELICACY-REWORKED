@@ -67,7 +67,7 @@ local function CreateNotification(ply, msg, delay, msgKey, showTime, func, clr)
 end
 
 //erm it's ass but i don't care enough
-local function CreateNotificationBerserk(ply, msg, delay, msgKey, showTime, func, clr)
+local function CreateNotificationBerserk(ply, msg, delay, msgKey, showTime, func, clr, noChatPrint)
     if ply.organism and ply.organism.otrub then return end
     if ply.PlayerClassName and ply.PlayerClassName == "Gordon" and clr != hev_color then return end
     if msg == "" then return end
@@ -123,6 +123,7 @@ local function CreateNotificationBerserk(ply, msg, delay, msgKey, showTime, func
         net.WriteString(msg)
         //net.WriteFloat(showTime or 3)
         net.WriteColor(clr2)
+        net.WriteBool(noChatPrint == true)
         net.Send(ply)
     end)
 

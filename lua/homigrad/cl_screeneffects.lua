@@ -785,27 +785,30 @@ hook.Add("Post Post Processing", "ItHurts", function()
 		end
 	end
 
-	local despair = math.Clamp(org.despair or 0, 0, 1)
+	local despair = org.otrub and 0 or math.Clamp(org.despair or 0, 0, 1)
 	despairLerp = LerpFT(0.04, despairLerp, despair)
 	despairVisualLerp = math.Approach(despairVisualLerp, despairLerp, FrameTime() * 0.45)
 
 	local despairFx = math.Clamp((despairVisualLerp - 0.03) / 0.97, 0, 1)
 	if despairFx > 0.001 then
+		local despairShock = despairFx ^ 0.7
 		render.UpdateScreenEffectTexture()
 		heatMat:SetFloat("$c0_x", -CurTime() * 0.18)
-		heatMat:SetFloat("$c0_y", despairFx * 0.22)
-		heatMat:SetFloat("$c2_x", (math.sin(CurTime() * 0.75) - 1.5) * (despairFx * 3.7))
+		heatMat:SetFloat("$c0_y", despairShock * 0.34)
+		heatMat:SetFloat("$c2_x", (math.sin(CurTime() * 0.75) - 1.5) * (despairShock * 5.4))
 		render.SetMaterial(heatMat)
 		render.DrawScreenQuad()
 
 		render.UpdateScreenEffectTexture()
-		coldMat:SetFloat("$c0_y", despairFx * 1.05)
-		render.SetMaterial(coldMat)
+		vignetteMat:SetFloat("$c2_x", CurTime() + 10000)
+		vignetteMat:SetFloat("$c0_z", despairShock * 2.4)
+		vignetteMat:SetFloat("$c1_y", despairShock * 2.6)
+		render.SetMaterial(vignetteMat)
 		render.DrawScreenQuad()
 
-		tab["$pp_colour_brightness"] = -(despairFx ^ 1.35) * 0.42
-		tab["$pp_colour_contrast"] = 1 - despairFx * 0.35
-		tab["$pp_colour_colour"] = 1 - despairFx * 0.97
+		tab["$pp_colour_brightness"] = -(despairShock ^ 1.2) * 0.58
+		tab["$pp_colour_contrast"] = 1 - despairShock * 0.5
+		tab["$pp_colour_colour"] = 1 - despairShock * 1.15
 		tab["$pp_colour_mulr"] = 0
 		tab["$pp_colour_mulg"] = 0
 		tab["$pp_colour_mulb"] = 0
@@ -836,11 +839,17 @@ hook.Add("Post Post Processing", "ItHurts", function()
 		end
 	else
 		if IsValid(despairSound) then
-			despairSoundVol = math.max(despairSoundVol - FrameTime() * 0.4, 0)
-			despairSound:SetVolume(despairSoundVol)
-			if despairSoundVol <= 0.001 then
+			if org.otrub then
 				despairSound:Stop()
 				despairSound = nil
+				despairSoundVol = 0
+			else
+				despairSoundVol = math.max(despairSoundVol - FrameTime() * 0.4, 0)
+				despairSound:SetVolume(despairSoundVol)
+				if despairSoundVol <= 0.001 then
+					despairSound:Stop()
+					despairSound = nil
+				end
 			end
 		end
 	end
@@ -881,6 +890,10 @@ hook.Add("DrawOverlay", "despair_text", function()
 
 	local org = ply.new_organism or ply.organism
 	if not org then return end
+	if org.otrub then
+		despairTextLerp = 0
+		return
+	end
 
 	local despair = math.Clamp(org.despair or 0, 0, 1)
 	local target = math.Clamp((despair - 0.5) / 0.5, 0, 1)

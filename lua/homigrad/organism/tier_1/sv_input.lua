@@ -867,11 +867,20 @@ hook.Add("EntityTakeDamage", "homigrad-damage", function(ent, dmgInfo)
 		local adrenaline = org.adrenaline
 		local analgesiaMul = (org.analgesia * 4 + 1)
 		local painkillerMul = (org.painkiller * 0.5 + 1)
+		local inflictor = dmgInfo:GetInflictor()
+		local inflictorClass = IsValid(inflictor) and inflictor:GetClass() or ""
+		local inflictorBase = IsValid(inflictor) and inflictor.Base or ""
+		local meleeHit = dmgInfo:IsDamageType(DMG_CLUB + DMG_SLASH) or inflictorBase == "weapon_melee" or inflictorClass == "weapon_melee"
 	
 		org.shock_turn = 10 * (!org.otrub and 1 or 0.1)
 	
-		if org.shock > org.shock_turn * 1.5 * analgesiaMul * painkillerMul then
-			timer.Simple(0, function() hg.Fake(org.owner) end)
+		local shockFakeThreshold = org.shock_turn * 2.2 * analgesiaMul * painkillerMul * (meleeHit and 1.9 or 1)
+		if org.shock > shockFakeThreshold and (org.nextShockFake or 0) < CurTime() then
+			org.nextShockFake = CurTime() + (meleeHit and 2.25 or 1.5)
+			timer.Simple(0, function()
+				if not IsValid(org.owner) then return end
+				hg.Fake(org.owner)
+			end)
 		end
 
 		if bullet and hg.ammotypeshuy[bullet.AmmoType] and hg.ammotypeshuy[bullet.AmmoType].BulletSettings.tranquilizer then

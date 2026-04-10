@@ -105,7 +105,7 @@ SWEP.StaminaSecondary = 10
 SWEP.AttackLen1 = 55
 SWEP.AttackLen2 = 30
 
-SWEP.BlockTier = 2
+SWEP.BlockTier = 3
 SWEP.MeleeMaterial = "wood"
 SWEP.BlockImpactSound = "physics/wood/wood_plank_impact_hard1.wav"
 

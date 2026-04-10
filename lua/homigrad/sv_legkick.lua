@@ -23,11 +23,12 @@ function PLAYER:LegAttack()
     self:EmitSound("player/clothes_generic_foley_0" .. math.random(1,5) .. ".wav",65)
 
     local org = self.organism
-    org.stamina.subadd = org.stamina.subadd + (anim == "curbstomp_base" and 10 or 17)
+    org.stamina.subadd = org.stamina.subadd + (anim == "curbstomp_base" and 8 or 14)
     local speedmul = (2 - (org.stamina[1] / org.stamina.max))
-    local speed = 1.5 * speedmul
+    local speed = 1.42 * speedmul
     local animstopAdjust = 0.3 * speedmul
     local dmg = anim == "curbstomp_base" and 24 or 10 * (2 - speedmul)
+    local kickNerf = 0.85
 
     if isMidAir then
         local vel = self:GetVelocity():Length()
@@ -40,6 +41,7 @@ function PLAYER:LegAttack()
     if isMidAir then
         dmg = math.min(dmg * 0.5, 21)
     end
+    dmg = dmg * kickNerf
     --print(dmg)
     --print(speedmul)
     self:PlayCustomAnims(anim, true, speed, true, animstopAdjust, {
@@ -57,7 +59,7 @@ function PLAYER:LegAttack()
                 filter = {hg.GetCurrentCharacter(self),self}
             })
             if tr.Hit and (self:IsOnGround() or isMidAir) then
-                self:SetVelocity(ang:Forward() * -300)
+                self:SetVelocity(ang:Forward() * (isMidAir and -120 or -300))
             end
         end,
         [0.21] = function(self)
@@ -79,7 +81,7 @@ function PLAYER:LegAttack()
             })
             if tr.Hit and (self:IsOnGround() or isMidAir) then
                 --self:EmitSound("weapons/melee/blunt_light" .. math.random(1,8) .. ".wav")
-                self:SetVelocity(ang:Forward() * -150)
+                self:SetVelocity(ang:Forward() * (isMidAir and -70 or -150))
             end
         end,
         [0.33] = function(self) -- kick moment
@@ -204,12 +206,12 @@ function PLAYER:LegAttack()
 					MaxPenLenGlobal = 1
                     
                     local horizSpeed = Vector(velocity.x, velocity.y, 0):Length()
-                    local forceMult = math.max(500, 700 - horizSpeed / 6) * (isMidAir and 0.9 or 1)
+                    local forceMult = math.max(500, 700 - horizSpeed / 6) * (isMidAir and 0.9 or 1) * kickNerf
                     hg.AddForceRag(ent, tr.PhysicsBone or 0, normal * dmg * forceMult, 0.25)
                     ent:TakeDamageInfo(dmginfo)
                     
                     if IsValid(phys) then
-                        local forceOffsetMult = math.max(110, 150 - horizSpeed / 70) * (isMidAir and 0.9 or 1)
+                        local forceOffsetMult = math.max(110, 150 - horizSpeed / 70) * (isMidAir and 0.9 or 1) * kickNerf
                         phys:ApplyForceOffset(normal * dmg * forceOffsetMult, tr.HitPos)
                     end
 
@@ -218,15 +220,17 @@ function PLAYER:LegAttack()
 					end
 
                     if ent:IsPlayer() then
-                        if math.random(1,5) > 3 then
+                        local didRagdoll = math.random(1,10) <= (isMidAir and 3 or 2)
+                        local baseKnockback = math.max(95, 145 - horizSpeed / 20) * (isMidAir and 1.35 or 1)
+                        ent:SetVelocity(normal * baseKnockback)
+                        if didRagdoll then
                             timer.Simple(0,function()
                                 hg.Fake(ent)
                             end)
+                        else
+                            local pushKnockback = math.max(150, 230 - horizSpeed / 16) * (isMidAir and 1.7 or 1)
+                            ent:SetVelocity(normal * pushKnockback)
                         end
-
-                        local horizSpeed = Vector(velocity.x, velocity.y, 0):Length()
-                        local knockback = math.max(10, 20 - horizSpeed / 70) * (isMidAir and 0.9 or 1)
-                        ent:SetVelocity(normal * knockback)
                     end
                     if hgIsDoor(ent) and !ent:GetNoDraw() then
                         ent.HP = ent.HP or 200

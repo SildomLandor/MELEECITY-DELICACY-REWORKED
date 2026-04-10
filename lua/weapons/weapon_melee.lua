@@ -112,6 +112,8 @@ SWEP.HeavyAttackDelay = 0.5 -- Slower swing
 SWEP.HeavyAttackTimeLength = 0.4 -- Longer hit window
 SWEP.HeavyAttackViewPunch = Angle(2, 2, 0)
 SWEP.HeavyAttackMaxChargeTime = 2.0 -- Time to reach max damage
+SWEP.HeavyAttackAfterGetupCooldown = 2.0
+SWEP.HeavyAttackGetupNWKey = "HGHeavyGetupCooldown"
 
 SWEP.HeavyAttackSwingAng = 0
 SWEP.HeavyAttackRads = 65
@@ -1203,16 +1205,20 @@ function SWEP:BlockingLogic(ent, mul, attacktype, trace)
 
             if defenderBlockTier >= attackerBlockTier then
                 if attacktype == 3 then
-                    ent:EmitSound("blockbreak.ogg", 65, 112)
-                    if SERVER then
-                        hg.drop(ent)
-                        
-                        net.Start("MeleeBlockEffect")
-                        net.WriteVector(trace.HitPos)
-                        net.WriteString((wep.MeleeMaterial or "none") .. "_broken")
-                        net.Broadcast()
+                    local defenderStamina = ent.organism and ent.organism.stamina and ent.organism.stamina[1] or 0
+                    local heavyBreakChance = math.Clamp(attackerBlockTier * 0.12, 0, 0.35)
+                    if defenderStamina < 65 and math.random() <= heavyBreakChance then
+                        ent:EmitSound("blockbreak.ogg", 65, 112)
+                        if SERVER then
+                            hg.drop(ent)
+                            
+                            net.Start("MeleeBlockEffect")
+                            net.WriteVector(trace.HitPos)
+                            net.WriteString((wep.MeleeMaterial or "none") .. "_broken")
+                            net.Broadcast()
+                        end
+                        return 1
                     end
-                    return 1
                 end
 
                 if wep.BlockImpactSound then
@@ -1236,20 +1242,24 @@ function SWEP:BlockingLogic(ent, mul, attacktype, trace)
 
                 local perfectblock = CurTime() - wep:GetStartedBlocking() < 0.5
                 
+                local heavyBlockedNoBreak = attacktype == 3
+                local staminaLossMul = heavyBlockedNoBreak and 1.75 or 1
+                local blockerViewPunchMul = heavyBlockedNoBreak and 1.8 or 1
+
                 if perfectblock then
                     ent:EmitSound("parry.ogg", 75)
                 else
                     if ent.organism then
-                        ent.organism.stamina.subadd = ent.organism.stamina.subadd + 15
+                        ent.organism.stamina.subadd = ent.organism.stamina.subadd + 15 * staminaLossMul
                     end
                 end
 
-                ent.organism.stamina.subadd = ent.organism.stamina.subadd + mul * math.Clamp(selfdmg / dmg, 0.1, 1) * selfdmg * (perfectblock and 0 or 1)
+                ent.organism.stamina.subadd = ent.organism.stamina.subadd + mul * math.Clamp(selfdmg / dmg, 0.1, 1) * selfdmg * (perfectblock and 0 or 1) * staminaLossMul
 
                 if not owner:IsNPC() then
                     self:PunchPlayer(owner, attacktype, -owner:GetAimVector(), selfdmg / 2)
                 end
-                self:PunchPlayer(ent, attacktype, owner:GetAimVector(), selfdmg / 2)
+                self:PunchPlayer(ent, attacktype, owner:GetAimVector(), (selfdmg / 2) * blockerViewPunchMul)
                 
                 if perfectblock then
                     -- ent:EmitSound("tasty/empty.wav")
@@ -1383,44 +1393,29 @@ function SWEP:CustomThink()
     if self.CanHeavyAttack then
         local state = self.GetChargeState and self:GetChargeState() or self:GetDTInt(6)
         local nextState = self.GetNextChargeStateTime and self:GetNextChargeStateTime() or self:GetDTFloat(9)
+        if CLIENT then
+            nextState = math.max(nextState or 0, self.HeavyChargeNextStateLocal or 0)
+        end
         local curTime = CurTime()
         local attackDown = hg.KeyDown(owner, IN_ATTACK)
         local useDown = hg.KeyDown(owner, IN_USE)
         local feintPressed = owner.KeyPressed and owner:KeyPressed(IN_ATTACK2)
-
-        if self.HeavyAttackFeintBlockUntilRelease and not attackDown then
-            self.HeavyAttackFeintBlockUntilRelease = false
-        end
-
-        if not IsValid(owner) or not owner:Alive() or owner.fake or (owner.organism and (owner.organism.fake or owner.organism.otrub)) or IsValid(owner.FakeRagdoll) then
-            if state ~= 0 then
-                if self.SetChargeState then self:SetChargeState(0) else self:SetDTInt(6, 0) end
-                self.HeavyAttackStaminaDeducted = false
-                self.HeavyAttackFeintBlockUntilRelease = false
-                self.HeavyChargeStaminaDrainAcc = 0
-                self.HeavyChargeStaminaDrainTick = curTime
-                if CLIENT then
-                    self.ShakePos = Vector(0,0,0)
-                    self.ShakeAng = Angle(0,0,0)
-                end
-                
-                -- Stop charge effects
-                owner:StopSound("pwb2/weapons/mac11/draw.wav")
-                self:PlayAnim("idle", 1, false, nil, false)
-            end
-        elseif (state == 1 or state == 2) and useDown and attackDown and feintPressed and not self:GetInAttack() then
-            local cancelTime = self.HeavyAttackAnimTimeBegin
-            if state == 1 then
-                local startTime = self.GetChargeStartTime and self:GetChargeStartTime() or self:GetDTFloat(10)
-                cancelTime = math.Clamp(curTime - startTime, 0.05, self.HeavyAttackAnimTimeBegin)
-            end
+        local heavyGetupCooldownDuration = self.HeavyAttackAfterGetupCooldown or 2
+        local heavyGetupCooldownEnd = owner:GetNWFloat(self.HeavyAttackGetupNWKey or "HGHeavyGetupCooldown", 0)
+        heavyGetupCooldownEnd = math.max(heavyGetupCooldownEnd, (owner.LastFakeUp or 0) + heavyGetupCooldownDuration)
+        local heavyGetupBlocked = curTime < heavyGetupCooldownEnd
+        local function cancelHeavyChargeWithFeintAnim(cancelTime)
+            cancelTime = math.Clamp(cancelTime or self.HeavyAttackAnimTimeBegin, 0.05, self.HeavyAttackAnimTimeBegin)
             local feintLockTime = math.max(cancelTime, 0.5)
-            self:PlayAnim(self.Attack_Charge_Begin, cancelTime, false, nil, true, false)
+            self:PlayAnim(self.Attack_Charge_Begin, cancelTime, false, nil, true, true)
             if self.SetChargeState then self:SetChargeState(0) else self:SetDTInt(6, 0) end
             if self.SetNextChargeStateTime then self:SetNextChargeStateTime(0) else self:SetDTFloat(9, 0) end
+            self.HeavyChargeNextStateLocal = 0
+            self.HeavyChargeStartLocal = 0
             self.HeavyAttackStaminaDeducted = false
             self.HeavyChargeStaminaDrainAcc = 0
             self.HeavyChargeStaminaDrainTick = curTime
+            self.HeavyChargeBeginAnimEnd = 0
             self.HeavyAttackFeintLockEndTime = curTime + feintLockTime
             self.HeavyAttackFeintBlockUntilRelease = true
             self:SetInAttack(false)
@@ -1432,24 +1427,79 @@ function SWEP:CustomThink()
                 self.ShakePos = Vector(0,0,0)
                 self.ShakeAng = Angle(0,0,0)
             end
+        end
+
+        if self.HeavyAttackFeintBlockUntilRelease and not attackDown then
+            self.HeavyAttackFeintBlockUntilRelease = false
+        end
+
+        if not IsValid(owner) or not owner:Alive() or owner.fake or (owner.organism and (owner.organism.fake or owner.organism.otrub)) or IsValid(owner.FakeRagdoll) then
+            if state ~= 0 then
+                if (state == 1 or state == 2) and IsValid(owner) then
+                    local cancelTime = self.HeavyAttackAnimTimeBegin
+                    if state == 1 then
+                        local startTime = self.GetChargeStartTime and self:GetChargeStartTime() or self:GetDTFloat(10)
+                        cancelTime = math.Clamp(curTime - startTime, 0.05, self.HeavyAttackAnimTimeBegin)
+                    elseif state == 2 then
+                        cancelTime = self.HeavyAttackAnimTimeBegin
+                    end
+                    cancelHeavyChargeWithFeintAnim(cancelTime)
+                    state = 0
+                else
+                    if self.SetChargeState then self:SetChargeState(0) else self:SetDTInt(6, 0) end
+                    self.HeavyAttackStaminaDeducted = false
+                    self.HeavyAttackFeintBlockUntilRelease = false
+                    self.HeavyChargeNextStateLocal = 0
+                    self.HeavyChargeStartLocal = 0
+                    self.HeavyChargeStaminaDrainAcc = 0
+                    self.HeavyChargeStaminaDrainTick = curTime
+                    self.HeavyChargeBeginAnimEnd = 0
+                    if CLIENT then
+                        self.ShakePos = Vector(0,0,0)
+                        self.ShakeAng = Angle(0,0,0)
+                    end
+                    if IsValid(owner) then
+                        owner:StopSound("pwb2/weapons/mac11/draw.wav")
+                    end
+                    self:PlayAnim("idle", 1, false, nil, false)
+                end
+            elseif CLIENT then
+                self.HeavyChargeNextStateLocal = 0
+                self.HeavyChargeStartLocal = 0
+                self:PlayAnim("idle", 1, false, nil, false, true)
+            end
+        elseif (state == 1 or state == 2) and useDown and attackDown and feintPressed and not self:GetInAttack() then
+            local cancelTime = self.HeavyAttackAnimTimeBegin
+            if state == 1 then
+                local startTime = self.GetChargeStartTime and self:GetChargeStartTime() or self:GetDTFloat(10)
+                cancelTime = math.Clamp(curTime - startTime, 0.05, self.HeavyAttackAnimTimeBegin)
+            end
+            cancelHeavyChargeWithFeintAnim(cancelTime)
             state = 0
         elseif state == 0 then
             self.HeavyChargeStaminaDrainAcc = 0
             self.HeavyChargeStaminaDrainTick = curTime
-            if useDown and attackDown and not self.HeavyAttackFeintBlockUntilRelease and not self:GetInAttack() and (self:GetLastAttack() + self:GetAttackWait() < curTime) and not self:GetBlocking() and not self:IsEquipLocked() then
+            if useDown and attackDown and not heavyGetupBlocked and not self.HeavyAttackFeintBlockUntilRelease and not self:GetInAttack() and (self:GetLastAttack() + self:GetAttackWait() < curTime) and not self:GetBlocking() and not self:IsEquipLocked() then
                 if owner.organism and owner.organism.stamina and owner.organism.stamina[1] and owner.organism.stamina[1] < 80 then return end
                 if self.SetChargeState then self:SetChargeState(1) else self:SetDTInt(6, 1) end
                 self.HeavyAttackStaminaDeducted = false
                 if self.SetNextChargeStateTime then self:SetNextChargeStateTime(curTime + self.HeavyAttackAnimTimeBegin) else self:SetDTFloat(9, curTime + self.HeavyAttackAnimTimeBegin) end
                 if self.SetChargeStartTime then self:SetChargeStartTime(curTime) else self:SetDTFloat(10, curTime) end
-                self:PlayAnim(self.Attack_Charge_Begin, self.HeavyAttackAnimTimeBegin, false, nil, false)
+                self.HeavyChargeNextStateLocal = curTime + self.HeavyAttackAnimTimeBegin
+                self.HeavyChargeStartLocal = curTime
+                self:PlayAnim(self.Attack_Charge_Begin, self.HeavyAttackAnimTimeBegin, false, nil, false, true)
+                self.HeavyChargeBeginAnimEnd = curTime + self.HeavyAttackAnimTimeBegin
                 
                 -- Play cloth sound on begin
                 owner:EmitSound("pwb2/weapons/mac11/draw.wav", 55, 100)
             end
         elseif state == 1 then
              local startTime = self.GetChargeStartTime and self:GetChargeStartTime() or self:GetDTFloat(10)
+             if CLIENT then
+                startTime = math.max(startTime or 0, self.HeavyChargeStartLocal or 0)
+             end
              local chargeProgress = math.min((curTime - startTime) / self.HeavyAttackMaxChargeTime, 1.0)
+             local beginEndTime = startTime + self.HeavyAttackAnimTimeBegin
              
              if CLIENT then
                 local shake = chargeProgress * 0.01 -- Reduced from 0.05
@@ -1457,10 +1507,11 @@ function SWEP:CustomThink()
                 self.ShakeAng = self.ShakeAng + AngleRand() * (shake * 0.5)
              end
 
-            if curTime >= nextState then
+            if curTime >= beginEndTime then
                 if not hg.KeyDown(owner, IN_ATTACK) then
                      -- Released during charge? Go straight to attack
                     if self.SetChargeState then self:SetChargeState(3) else self:SetDTInt(6, 3) end
+                    self.HeavyChargeNextStateLocal = 0
                     
                     self.HitEnts = nil
                     self.FirstAttackTick = false
@@ -1471,7 +1522,7 @@ function SWEP:CustomThink()
                     mul = 1 / math.Clamp((180 - owner.organism.stamina[1]) / 90, 1, 2)
                 end
 
-                self:PlayAnim(self.Attack_Charge_End, self.HeavyAttackAnimTimeEnd / mul, false, nil, false)
+                self:PlayAnim(self.Attack_Charge_End, self.HeavyAttackAnimTimeEnd / mul, false, nil, false, true)
 
                 if SERVER and owner.organism and owner.organism.stamina and not self.HeavyAttackStaminaDeducted then
                     owner.organism.stamina.subadd = owner.organism.stamina.subadd + (self.HeavyAttackStamina or 20)
@@ -1499,11 +1550,16 @@ function SWEP:CustomThink()
                 else
                     if self.SetChargeState then self:SetChargeState(2) else self:SetDTInt(6, 2) end
                     if self.SetNextChargeStateTime then self:SetNextChargeStateTime(curTime + self.HeavyAttackAnimTimeIdle) else self:SetDTFloat(9, curTime + self.HeavyAttackAnimTimeIdle) end
-                    self:PlayAnim(self.Attack_Charge_Idle, self.HeavyAttackAnimTimeIdle, true, nil, false)
+                    self.HeavyChargeNextStateLocal = curTime + self.HeavyAttackAnimTimeIdle
+                    self.HeavyChargeBeginAnimEnd = 0
+                    self:PlayAnim(self.Attack_Charge_Idle, self.HeavyAttackAnimTimeIdle, true, nil, false, true)
                 end
             end
         elseif state == 2 then
              local startTime = self.GetChargeStartTime and self:GetChargeStartTime() or self:GetDTFloat(10)
+             if CLIENT then
+                startTime = math.max(startTime or 0, self.HeavyChargeStartLocal or 0)
+             end
              local chargeProgress = math.min((curTime - startTime) / self.HeavyAttackMaxChargeTime, 1.0)
 
              if CLIENT then
@@ -1515,6 +1571,7 @@ function SWEP:CustomThink()
             if not hg.KeyDown(owner, IN_ATTACK) then
                 -- Trigger Attack
                 if self.SetChargeState then self:SetChargeState(3) else self:SetDTInt(6, 3) end
+                self.HeavyChargeNextStateLocal = 0
                 
                 local mul = 1
                 if owner.organism and owner.organism.stamina and owner.organism.stamina[1] then
@@ -1525,7 +1582,7 @@ function SWEP:CustomThink()
                 self.FirstAttackTick = false
                 self.AttackHitPlayed = false
                 
-                self:PlayAnim(self.Attack_Charge_End, self.HeavyAttackAnimTimeEnd / mul, false, nil, false)
+                self:PlayAnim(self.Attack_Charge_End, self.HeavyAttackAnimTimeEnd / mul, false, nil, false, true)
 
                 if SERVER and owner.organism and owner.organism.stamina and not self.HeavyAttackStaminaDeducted then
                     owner.organism.stamina.subadd = owner.organism.stamina.subadd + (self.HeavyAttackStamina or 20)
@@ -1554,12 +1611,15 @@ function SWEP:CustomThink()
             elseif curTime >= nextState then
                  -- Loop idle
                  if self.SetNextChargeStateTime then self:SetNextChargeStateTime(curTime + self.HeavyAttackAnimTimeIdle) else self:SetDTFloat(9, curTime + self.HeavyAttackAnimTimeIdle) end
-                 self:PlayAnim(self.Attack_Charge_Idle, self.HeavyAttackAnimTimeIdle, true, nil, false)
+                 self.HeavyChargeNextStateLocal = curTime + self.HeavyAttackAnimTimeIdle
+                 self:PlayAnim(self.Attack_Charge_Idle, self.HeavyAttackAnimTimeIdle, true, nil, false, true)
             end
         elseif state == 3 then
              -- Attack logic is handled by GetInAttack() block
+             self.HeavyChargeNextStateLocal = 0
              self.HeavyChargeStaminaDrainAcc = 0
              self.HeavyChargeStaminaDrainTick = curTime
+             self.HeavyChargeBeginAnimEnd = 0
              if not self:GetInAttack() then
                  if self.SetChargeState then self:SetChargeState(0) else self:SetDTInt(6, 0) end
              end

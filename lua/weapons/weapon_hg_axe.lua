@@ -99,7 +99,7 @@ SWEP.HitFleshExtra = {
     "axe/axehit4.wav",
     "axe/axehit5.wav",
 }
-SWEP.HitFleshExtraPitch = 110
+SWEP.HitFleshExtraPitch = 112
 SWEP.SwingSoundPitch = {85, 95}
 
 SWEP.AttackPos = Vector(0,0,0)

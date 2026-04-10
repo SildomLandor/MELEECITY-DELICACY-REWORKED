@@ -1127,6 +1127,9 @@ local TrackedEnts = {
 	["Grenade"] = {"weapon_hg_hl2nade_tpik"},
 	["npc_grenade_frag"] = {"ent_hg_grenade_hl2grenade"},
 	["ent_jack_hmcd_ducttape"] = {"weapon_ducttape"},
+	["ent_hmcd_mansion_cup"]={"weapon_hg_mug"},
+	["ent_hmcd_mansion_knife"]={"weapon_pocketknife"},
+	--["ent_hmcd_mansion_cuestick"]={"weapon_hg_spear"},	now we wait for kazoo to add a proper cuestick swep
 }
 
 local TrackedEntsHalfLife = {
@@ -1140,6 +1143,7 @@ local TrackedEntsHalfLife = {
 	["weapon_smg1"]={"weapon_mp7"},
 	["weapon_slam"]={"weapon_hg_slam"},
 	["weapon_rpg"]={"weapon_hg_rpg"},
+	["weapon_physcannon"]={"weapon_hg_gravitygun"},
 	["item_ammo_357"]={"ent_ammo_.357magnum"},
 	["item_ammo_357_large"]={"ent_ammo_.357magnum"},
 	["item_ammo_pistol"]={"ent_ammo_9x19mmparabellum"},
@@ -1195,10 +1199,11 @@ end
 local TrackedEntsNpc = table.Copy(TrackedEnts)
 
 TrackedEntsNpc["weapon_ar2"] = {"weapon_osipr"}
-TrackedEntsNpc["weapon_crowbar"] = {"weapon_bat"}
+TrackedEntsNpc["weapon_crowbar"] = {"weapon_bat", "weapon_hg_crowbar"}
 TrackedEntsNpc["weapon_stunstick"] = {"weapon_hg_stunstick"}
 TrackedEntsNpc["weapon_shotgun"] = {"weapon_spas12"}
 TrackedEntsNpc["npc_grenade_frag"] = {"ent_hg_grenade_hl2grenade"}
+TrackedEntsNpc["weapon_alyxgun"] = {"weapon_pl15"}	--for co-op!
 
 local fuckingwait = 0
 hook.Add("PreCleanupMap","ReplaceEntCD",function()

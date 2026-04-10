@@ -142,6 +142,9 @@ local function send_organism(org, ply)
 	sendtable.shock = org.shock
 	sendtable.pulse = org.pulse
 	sendtable.heartbeat = org.heartbeat
+	sendtable.bloodpressure = org.bloodpressure
+	sendtable.systolic = org.systolic
+	sendtable.diastolic = org.diastolic
 	sendtable.timeValue = org.timeValue
 	sendtable.holdingbreath = org.holdingbreath
 	sendtable.arteria = org.arteria
@@ -205,6 +208,9 @@ local function send_bareinfo(org)
 	sendtable.pulse = org.pulse
 	sendtable.blood = org.blood
 	sendtable.heartbeat = org.heartbeat
+	sendtable.bloodpressure = org.bloodpressure
+	sendtable.systolic = org.systolic
+	sendtable.diastolic = org.diastolic
 	sendtable.analgesia = org.analgesia
 	sendtable.o2 = org.o2
 	sendtable.timeValue = org.timeValue
@@ -548,6 +554,10 @@ hook.Add("Org Think", "Main", function(owner, org, timeValue)
 	local despairDecay = timeValue / 160
 	if org.despair > 0.35 then
 		despairDecay = timeValue / 360
+	end
+	local analgesia = math.Clamp(org.analgesia or 0, 0, 4)
+	if analgesia > 0 then
+		despairDecay = despairDecay * (1 + analgesia * 1.25 + analgesia * analgesia * 0.4)
 	end
 	org.despair = math.Approach(org.despair, 0, despairDecay)
 
@@ -908,6 +918,9 @@ hook.Add("Org Think", "regenerationnoradrenaline", function(owner, org, timeValu
 
 	org.pulse = math.Approach(org.pulse, 70, regen * 10)
 	org.heartbeat = math.Approach(org.heartbeat, 220, regen * 10)
+	org.bloodpressure = math.Approach(org.bloodpressure or 93, 110, regen * 8)
+	org.systolic = math.Approach(org.systolic or 120, 140, regen * 8)
+	org.diastolic = math.Approach(org.diastolic or 80, 90, regen * 8)
 
 	org.lungsfunction = true
 	org.heartstop = false

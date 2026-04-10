@@ -38,6 +38,8 @@ end
 local blacklist = {
     ["gm_construct"] = true, ["gm_flatgrass"] = true, ["gm_altarskforest"] = true, ["gm_renostruct_v2"] = true,
     ["gm_renostruct_v2_night"] = true, ["gm_city_of_silence"] = true, ["ttt_hogwarts"] = true,
+    ["mu_smallotown_v2_hl2"] = true, ["mu_smallotown_waste_v2_13"] = true, ["hmcd_gonka"] = true,
+    ["hmcd_bloodring"] = true, ["hmcd_metropolis_extended"] = true,
 }
 local adminBlacklist = {}
 
@@ -86,14 +88,21 @@ if file.Exists(popularityPath, "DATA") then
     mapPopularity = util.JSONToTable(data) or {}
 end
 
-local adminBlacklistPath = GetDataPath("AdminMapBlacklist.json")
-if file.Exists(adminBlacklistPath, "DATA") then
-    local data = file.Read(adminBlacklistPath, "DATA")
+local legacyAdminBlacklistPath = GetDataPath("AdminMapBlacklist.json")
+local sharedAdminBlacklistPath = "zbattle/AdminMapBlacklist.json"
+local adminBlacklistPath = sharedAdminBlacklistPath
+if file.Exists(sharedAdminBlacklistPath, "DATA") then
+    local data = file.Read(sharedAdminBlacklistPath, "DATA")
     adminBlacklist = util.JSONToTable(data) or {}
+elseif file.Exists(legacyAdminBlacklistPath, "DATA") then
+    local data = file.Read(legacyAdminBlacklistPath, "DATA")
+    adminBlacklist = util.JSONToTable(data) or {}
+    file.Write(sharedAdminBlacklistPath, util.TableToJSON(adminBlacklist))
 end
 
 local function SaveAdminBlacklist()
     file.Write(adminBlacklistPath, util.TableToJSON(adminBlacklist))
+    file.Write(legacyAdminBlacklistPath, util.TableToJSON(adminBlacklist))
 end
 
 local function NormalizeMapName(mapName)

@@ -40,10 +40,9 @@ function SWEP:InitializeAdd()
 	}
 
 	if SERVER then
-		if math.random(2) == 1 then
+		self.bloodtype = "o-"
+		if math.random(10) == 1 then
 			self.modeValues[1] = 1
-			//local val,index = table.Random(hg.organism.bloodtypes)
-			self.bloodtype = "o-"
 		end
 	end
 end
@@ -139,13 +138,17 @@ if SERVER then
 		if self:GetNetVar("mode",2) == 2 then
 			if self.modeValues[1] != 1 then
 				if owner:KeyDown(IN_ATTACK) or owner:KeyDown(IN_ATTACK2) then
-					local ent = owner:KeyDown(IN_ATTACK) and owner or hg.eyeTrace(self:GetOwner()).Entity
+					local takingSelf = owner:KeyDown(IN_ATTACK)
+					local ent = takingSelf and owner or hg.eyeTrace(self:GetOwner()).Entity
 					if not ent.organism then return end
 					local ent = hg.GetCurrentCharacter(ent)
 					if ent:GetVelocity():LengthSqr() < 25 and ent.organism.blood > 2000 and (not self.bloodtype or ent.organism.bloodtype == self.bloodtype) then
 						local old = -(-self.modeValues[1])
 						self.modeValues[1] = math.min(self.modeValues[1] + FrameTime() * (math.max(ent.organism.pulse / 70,0.3)) * 0.5,1)
 						self.bloodtype = ent.organism.bloodtype
+						if takingSelf and ent.organism.lungsR and ent.organism.lungsL and (ent.organism.lungsR[2] == 1 or ent.organism.lungsL[2] == 1) then
+							ent.organism.needle = 1
+						end
 
 						if ent.organism.furryinfected then
 							self.furryinfected = true
