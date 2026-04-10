@@ -65,6 +65,8 @@ local GasTankSmokeSettings = {
 	Magnitude = 1.4,
 	DrainPerTick = 1.4
 }
+local GasTankMainThinkInterval = 0.03
+local GasTankAngularVelocityScale = 1.8
 
 function hg.PlayExtraExplosionSound(pos, entIndex, volume)
 	if not pos then return end
@@ -239,7 +241,7 @@ function hg.GasTankDetonate(ent)
 
 	net.Start("hg_gastank_stop")
 	net.WriteUInt(idx, 16)
-	net.Broadcast()
+	net.SendPVS(ent:GetPos())
 
 	hg.GasTank.ActiveTanks[idx] = nil
 
@@ -260,6 +262,47 @@ local function safeExplosionDir(fromPos, toPos)
 	return force, len
 end
 
+local function SendExplosionNet(selfPos, expType)
+	net.Start("hg_booom")
+		net.WriteVector(selfPos)
+		net.WriteString(expType)
+	net.SendPVS(selfPos)
+end
+
+local function ProcessExplosionTargets(ent, selfPos, dis, pushForce, playerForceMul, onOrganism)
+	local entsCount = 0
+	for _, enta in ipairs(ents.FindInSphere(selfPos, dis)) do
+		if enta == ent then continue end
+		local phys = enta:GetPhysicsObject()
+		local isPlayer = enta:IsPlayer()
+		local hasOrganism = enta.organism and IsValid(enta.organism.owner) and enta.organism.owner:IsPlayer()
+		if not isPlayer and not IsValid(phys) and not hasOrganism then continue end
+		if IsValid(phys) then
+			entsCount = entsCount + 1
+		end
+		local tracePos = isPlayer and (enta:GetPos() + enta:OBBCenter()) or enta:GetPos()
+		local force, len = safeExplosionDir(selfPos, tracePos)
+		if not force then continue end
+		local frac = math.Clamp((dis - len) / dis, 0.5, 1)
+		local tr = hg.ExplosionTrace(selfPos, tracePos, {ent})
+		local visible = tr.Entity == enta
+		local behindwall = not visible and tr.MatType != MAT_GLASS
+		if hasOrganism and onOrganism then
+			onOrganism(enta, frac, behindwall, visible)
+		end
+		if not visible then continue end
+		local forceadd = force * frac * pushForce
+		if isPlayer then
+			hg.AddForceRag(enta, 0, forceadd * playerForceMul, playerForceMul)
+			hg.AddForceRag(enta, 1, forceadd * playerForceMul, playerForceMul)
+			timer.Simple(0, function() hg.LightStunPlayer(enta) end)
+		end
+		if not IsValid(phys) then continue end
+		phys:ApplyForceCenter(forceadd)
+	end
+	return entsCount
+end
+
 local ExpTypes = {
     Fire = function(Ent, Force, Mass)
 		local multi = math.min(Mass / 10,20)
@@ -273,10 +316,7 @@ local ExpTypes = {
 		--ParticleEffect("pcf_jack_incendiary_ground_sm2",SelfPos + vector_up * 1,vector_up:Angle())
 		hg.ExplosionEffect(SelfPos, Force / 0.2, 80)
 
-        net.Start("hg_booom")
-            net.WriteVector(SelfPos)
-            net.WriteString("Fire")
-        net.Broadcast()
+		SendExplosionNet(SelfPos, "Fire")
 
 		if not IsValid(Ent) then return end
 		local multi = math.min(Mass / 5, 20)
@@ -293,41 +333,10 @@ local ExpTypes = {
 		end
 
 		local dis = rad / 0.01900
-		local entsCount = 0
-		for i, enta in ipairs(ents.FindInSphere(SelfPos, dis)) do
-			if enta == Ent then continue end
-			local tracePos = enta:IsPlayer() and (enta:GetPos() + enta:OBBCenter()) or enta:GetPos()
-			local tr = hg.ExplosionTrace(SelfPos, tracePos, {Ent})
-			local phys = enta:GetPhysicsObject()
-			if IsValid(phys) then
-				entsCount = entsCount + 1
-			end
-			
-			local force, len = safeExplosionDir(SelfPos, enta:GetPos())
-			if not force then continue end
-			local frac = math.Clamp((dis - len) / dis, 0.5, 1)
-			local forceadd = force * frac * 50000
-
-			if enta.organism then
-				local behindwall = tr.Entity != enta and tr.MatType != MAT_GLASS
-				if IsValid(enta.organism.owner) and enta.organism.owner:IsPlayer() then
-					hg.ExplosionDisorientation(enta, 5 * frac / (behindwall and 3 or 1), 6 * frac / (behindwall and 3 or 1))
-					hg.RunZManipAnim(enta.organism.owner, "shieldexplosion")
-				end
-			end
-
-			if tr.Entity != enta then forceadd = forceadd / 5 continue end
-
-			if enta:IsPlayer() then
-				hg.AddForceRag(enta, 0, forceadd * 0.5, 0.5)
-				hg.AddForceRag(enta, 1, forceadd * 0.5, 0.5)
-
-				timer.Simple(0, function() hg.LightStunPlayer(enta) end)
-			end
-
-			if not IsValid(phys) then continue end
-			phys:ApplyForceCenter(forceadd)
-		end
+		local entsCount = ProcessExplosionTargets(Ent, SelfPos, dis, 50000, 0.5, function(target, frac, behindwall)
+			hg.ExplosionDisorientation(target, 5 * frac / (behindwall and 3 or 1), 6 * frac / (behindwall and 3 or 1))
+			hg.RunZManipAnim(target.organism.owner, "shieldexplosion")
+		end)
 
 		if entsCount > 10 then
 			EmitSound(DebrisSounds[math.random(#DebrisSounds)], Ent:GetPos(), Ent:EntIndex(), CHAN_AUTO, 1, 80)
@@ -394,48 +403,14 @@ local ExpTypes = {
         --ParticleEffect("pcf_jack_groundsplode_medium",SelfPos + vector_up * 1,vector_up:Angle())
 		hg.ExplosionEffect(SelfPos, Force / 0.2, 80)
 
-        net.Start("hg_booom")
-            net.WriteVector(SelfPos)
-            net.WriteString("Sharpnel")
-        net.Broadcast()
+		SendExplosionNet(SelfPos, "Sharpnel")
 
 		local dis = rad / 0.01900
-		local entsCount = 0
-		for i, enta in ipairs(ents.FindInSphere(SelfPos, dis)) do
-			if enta == Ent then continue end
-			local tracePos = enta:IsPlayer() and (enta:GetPos() + enta:OBBCenter()) or enta:GetPos()
-			local tr = hg.ExplosionTrace(SelfPos, tracePos, {Ent})
-			local phys = enta:GetPhysicsObject()
-			if IsValid(phys) then
-				entsCount = entsCount + 1
-			end
-			
-			local force, len = safeExplosionDir(SelfPos, enta:GetPos())
-			if not force then continue end
-			local frac = math.Clamp((dis - len) / dis, 0.5, 1)
-			local forceadd = force * frac * 50000
-
-			if enta.organism then
-				local behindwall = tr.Entity != enta and tr.MatType != MAT_GLASS
-				if IsValid(enta.organism.owner) and enta.organism.owner:IsPlayer() and not behindwall then
-					hg.ExplosionDisorientation(enta, 5 * frac, 6 * frac)
-					hg.RunZManipAnim(enta.organism.owner, "shieldexplosion")
-				end
-			end
-
-			if tr.Entity != enta then forceadd = forceadd / 5 continue end
-
-
-			if enta:IsPlayer() then
-				hg.AddForceRag(enta, 0, forceadd * 0.5, 0.5)
-				hg.AddForceRag(enta, 1, forceadd * 0.5, 0.5)
-
-				timer.Simple(0, function() hg.LightStunPlayer(enta) end)
-			end
-
-			if not IsValid(phys) then continue end
-			phys:ApplyForceCenter(forceadd)
-		end
+		local entsCount = ProcessExplosionTargets(Ent, SelfPos, dis, 50000, 0.5, function(target, frac, behindwall)
+			if behindwall then return end
+			hg.ExplosionDisorientation(target, 5 * frac, 6 * frac)
+			hg.RunZManipAnim(target.organism.owner, "shieldexplosion")
+		end)
 
 		if entsCount > 10 then
 			EmitSound(DebrisSounds[math.random(#DebrisSounds)], Ent:GetPos(), Ent:EntIndex(), CHAN_AUTO, 1, 80)
@@ -501,48 +476,14 @@ local ExpTypes = {
         --ParticleEffect("pcf_jack_groundsplode_small",SelfPos + vector_up * 1,vector_up:Angle())
 		hg.ExplosionEffect(SelfPos, Force / 0.2, 80)
 
-        net.Start("hg_booom")
-            net.WriteVector(SelfPos)
-            net.WriteString("Normal")
-        net.Broadcast()
+		SendExplosionNet(SelfPos, "Normal")
 
 		local dis = rad / 0.01900
-		local entsCount = 0
-		for i, enta in ipairs(ents.FindInSphere(SelfPos, dis)) do
-			if enta == Ent then continue end
-			local tracePos = enta:IsPlayer() and (enta:GetPos() + enta:OBBCenter()) or enta:GetPos()
-			local tr = hg.ExplosionTrace(SelfPos, tracePos, {Ent})
-			local phys = enta:GetPhysicsObject()
-			if IsValid(phys) then
-				entsCount = entsCount + 1
-			end
-			
-			local force, len = safeExplosionDir(SelfPos, enta:GetPos())
-			if not force then continue end
-			local frac = math.Clamp((dis - len) / dis, 0.5, 1)
-			local forceadd = force * frac * 50000
-
-			if enta.organism then
-				local behindwall = tr.Entity != enta and tr.MatType != MAT_GLASS
-				if IsValid(enta.organism.owner) and enta.organism.owner:IsPlayer() and not behindwall then
-					hg.ExplosionDisorientation(enta, 5 * frac, 6 * frac)
-					hg.RunZManipAnim(enta.organism.owner, "shieldexplosion")
-				end
-			end
-
-			if tr.Entity != enta then forceadd = forceadd / 5 continue end
-
-
-			if enta:IsPlayer() then
-				hg.AddForceRag(enta, 0, forceadd * 0.5, 0.5)
-				hg.AddForceRag(enta, 1, forceadd * 0.5, 0.5)
-
-				timer.Simple(0, function() hg.LightStunPlayer(enta) end)
-			end
-
-			if not IsValid(phys) then continue end
-			phys:ApplyForceCenter(forceadd)
-		end
+		local entsCount = ProcessExplosionTargets(Ent, SelfPos, dis, 50000, 0.5, function(target, frac, behindwall)
+			if behindwall then return end
+			hg.ExplosionDisorientation(target, 5 * frac, 6 * frac)
+			hg.RunZManipAnim(target.organism.owner, "shieldexplosion")
+		end)
 
 		if entsCount > 10 then
 			EmitSound(DebrisSounds[math.random(#DebrisSounds)], Ent:GetPos(), Ent:EntIndex(), CHAN_AUTO, 1, 80)
@@ -565,46 +506,17 @@ local ExpTypes = {
 		hgBlastDoors(Ent, SelfPos, scaledForce / 35, scaledForce / 10)
 		hg.ExplosionEffect(SelfPos, scaledForce / 0.18, 85)
 
-		net.Start("hg_booom")
-			net.WriteVector(SelfPos)
-			net.WriteString("CustomBarrel")
-		net.Broadcast()
+		SendExplosionNet(SelfPos, "CustomBarrel")
 
 		for i = 1, 8 do
 			CreateVFireBall(14, 24, SelfPos + vector_up * 12, VectorRand(-350, 350) + Vector(0, 0, math.random(150, 350)))
 		end
 
-		local entsCount = 0
-		for i, enta in ipairs(ents.FindInSphere(SelfPos, dis)) do
-			if enta == Ent then continue end
-			local tracePos = enta:IsPlayer() and (enta:GetPos() + enta:OBBCenter()) or enta:GetPos()
-			local tr = hg.ExplosionTrace(SelfPos, tracePos, {Ent})
-			local phys = enta:GetPhysicsObject()
-			if IsValid(phys) then
-				entsCount = entsCount + 1
-			end
-
-			local force, len = safeExplosionDir(SelfPos, enta:GetPos())
-			if not force then continue end
-			local frac = math.Clamp((dis - len) / dis, 0.5, 1)
-			local forceadd = force * frac * 70000
-
-			if enta.organism and IsValid(enta.organism.owner) and enta.organism.owner:IsPlayer() and tr.Entity == enta then
-				hg.ExplosionDisorientation(enta, 6 * frac, 8 * frac)
-				hg.RunZManipAnim(enta.organism.owner, "shieldexplosion")
-			end
-
-			if tr.Entity != enta then forceadd = forceadd / 4 continue end
-
-			if enta:IsPlayer() then
-				hg.AddForceRag(enta, 0, forceadd * 0.6, 0.6)
-				hg.AddForceRag(enta, 1, forceadd * 0.6, 0.6)
-				timer.Simple(0, function() hg.LightStunPlayer(enta) end)
-			end
-
-			if not IsValid(phys) then continue end
-			phys:ApplyForceCenter(forceadd)
-		end
+		local entsCount = ProcessExplosionTargets(Ent, SelfPos, dis, 70000, 0.6, function(target, frac, behindwall, visible)
+			if not visible or behindwall then return end
+			hg.ExplosionDisorientation(target, 6 * frac, 8 * frac)
+			hg.RunZManipAnim(target.organism.owner, "shieldexplosion")
+		end)
 
 		if entsCount > 10 then
 			EmitSound(DebrisSounds[math.random(#DebrisSounds)], Ent:GetPos(), Ent:EntIndex(), CHAN_AUTO, 1, 80)
@@ -662,6 +574,7 @@ timer.Simple(0, function()
 end)
 
 hook.Add("Think", "hg_gastank_mainloop", function()
+	local curTime = CurTime()
 	for idx, data in pairs(hg.GasTank.ActiveTanks) do
 		local ent = data.Ent
 		if not IsValid(ent) then
@@ -677,6 +590,13 @@ hook.Add("Think", "hg_gastank_mainloop", function()
 
 		if not data.IsActive then continue end
 
+		if curTime < (data.NextMainThinkAt or 0) then continue end
+		local prevThinkAt = data.LastMainThinkAt or curTime
+		local thinkDelta = math.max(curTime - prevThinkAt, GasTankMainThinkInterval)
+		local thinkScale = math.Clamp(thinkDelta / GasTankMainThinkInterval, 0.65, 3.5)
+		data.LastMainThinkAt = curTime
+		data.NextMainThinkAt = curTime + GasTankMainThinkInterval
+
 		local phys = ent:GetPhysicsObject()
 		if IsValid(phys) and istable(data.Leaks) then
 			local pushForce = GasTankPushForce[ent:GetModel()] or GasTankPushForce.Default
@@ -686,20 +606,20 @@ hook.Add("Think", "hg_gastank_mainloop", function()
 					local holePos = ent:LocalToWorld(leak.LocalHolePos)
 					local dir = (ent:LocalToWorld(leak.LocalHolePos + leak.LocalNormal) - holePos):GetNormalized()
 					dir = (dir + VectorRand() * 0.1):GetNormalized()
-					phys:ApplyForceCenter(dir * pushForce)
-					phys:AddAngleVelocity(VectorRand() * 10 * FrameTime())
+					phys:ApplyForceCenter(dir * pushForce * thinkScale)
+					phys:AddAngleVelocity(VectorRand() * GasTankAngularVelocityScale * thinkScale)
 
-					if leak.Mode == "fire" and CurTime() > (data.NextBurnTime or 0) then
-						data.NextBurnTime = CurTime() + 0.1
+					if leak.Mode == "fire" and curTime > (data.NextBurnTime or 0) then
+						data.NextBurnTime = curTime + 0.1
 						EnsureLeakFire(ent, leak)
 						TryLeakIgniteNearby(ent, data, holePos, dir)
 					end
-					if leak.Mode == "smoke" and CurTime() > (leak.NextSmokeTime or 0) then
+					if leak.Mode == "smoke" and curTime > (leak.NextSmokeTime or 0) then
 						if (data.GasAmount or 0) <= 0 then
 							leak.Mode = "empty"
 							continue
 						end
-						leak.NextSmokeTime = CurTime() + GasTankSmokeSettings.NextTick
+						leak.NextSmokeTime = curTime + GasTankSmokeSettings.NextTick
 						local smoke = EffectData()
 						smoke:SetOrigin(holePos)
 						smoke:SetNormal(dir)
@@ -708,7 +628,7 @@ hook.Add("Think", "hg_gastank_mainloop", function()
 						util.Effect("eff_hg_co2_leak", smoke, true, true)
 						for _, ply in ipairs(ents.FindInSphere(holePos, 220)) do
 							if ply:IsPlayer() and ply:Alive() and ply.organism then
-								ply.organism.lastCOBreathe = CurTime()
+								ply.organism.lastCOBreathe = curTime
 							end
 						end
 						if data.GasAmount then
@@ -725,11 +645,11 @@ hook.Add("Think", "hg_gastank_mainloop", function()
 			data.Leaks = {}
 			net.Start("hg_gastank_stop")
 			net.WriteUInt(idx, 16)
-			net.Broadcast()
+			net.SendPVS(ent:GetPos())
 			continue
 		end
 
-		if CurTime() > (data.ExplodeAt or 0) then
+		if curTime > (data.ExplodeAt or 0) then
 			local hasFire = false
 			for i = 1, #data.Leaks do
 				if data.Leaks[i] and data.Leaks[i].Mode == "fire" then
@@ -740,7 +660,7 @@ hook.Add("Think", "hg_gastank_mainloop", function()
 			if hasFire then
 				hg.GasTankDetonate(ent)
 			else
-				data.ExplodeAt = CurTime() + 1
+				data.ExplodeAt = curTime + 1
 			end
 		end
 	end
@@ -794,14 +714,15 @@ hook.Add("EntityTakeDamage", "ExplosiveDamage", function( target, dmginfo )
 					Time = CurTime()
 				}
 
-				if CurTime() >= (tankData.NextLeakBroadcastAt or 0) then
-					tankData.NextLeakBroadcastAt = CurTime() + 0.06
+				local curTime = CurTime()
+				if curTime >= (tankData.NextLeakBroadcastAt or 0) then
+					tankData.NextLeakBroadcastAt = curTime + 0.06
 					net.Start("hg_gastank_leak")
 					net.WriteEntity(target)
 					net.WriteVector(localHole)
 					net.WriteVector(localNormal)
 					net.WriteString(mode)
-					net.Broadcast()
+					net.SendPVS(target:GetPos())
 				end
 
 				local phys = target:GetPhysicsObject()

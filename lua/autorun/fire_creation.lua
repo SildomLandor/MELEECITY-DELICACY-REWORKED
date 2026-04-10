@@ -6,6 +6,18 @@ vFire Creation Interface
 
 ---------------------------------------------------------------------------]]
 if SERVER then
+	local function ResolveVFireParent(parent)
+		if not IsValid(parent) or not parent:IsPlayer() then return parent end
+		local ragdoll = parent.FakeRagdoll
+		if not IsValid(ragdoll) then
+			ragdoll = parent:GetNWEntity("FakeRagdoll", NULL)
+		end
+		if IsValid(ragdoll) then
+			return ragdoll
+		end
+		return parent
+	end
+
 	--[[-------------------------------------------------------------------------
 	In charge of creating a new fire in the world in appropriate positions/angles
 	Attempts to create fire on a parent entity at a certain position
@@ -19,6 +31,9 @@ if SERVER then
 
 		--;; КАКАЩКЕ
 		if VFIRE_DISABLED then return end
+
+		parent = ResolveVFireParent(parent)
+		if not IsValid(parent) then return end
 
 		-- Just to make sure
 		if vFireIsVFireEnt(parent) then return end
