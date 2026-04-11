@@ -18,6 +18,7 @@ PERF.tick = PERF.tick or {
 local cvEnabled = CreateConVar("hg_perf_monitor_enabled", "0", FCVAR_ARCHIVE, "", 0, 1)
 local cvPrint = CreateConVar("hg_perf_monitor_print", "1", FCVAR_ARCHIVE, "", 0, 1)
 local cvInterval = CreateConVar("hg_perf_monitor_interval", "10", FCVAR_ARCHIVE, "", 2, 120)
+local cvSave = CreateConVar("hg_perf_monitor_save", "1", FCVAR_ARCHIVE, "", 0, 1)
 
 local SysTime = SysTime
 local CurTime = CurTime
@@ -46,6 +47,19 @@ local function getServerFrameMs()
 		return math.Round(FrameTime() * 1000, 4)
 	end
 	return 0
+end
+
+local function saveSnapshot(snapshot)
+	if not cvSave:GetBool() then return end
+	file.CreateDir("hg_perf_monitor")
+	local day = os.date("%Y%m%d")
+	local path = "hg_perf_monitor/" .. day .. ".jsonl"
+	local payload = util.TableToJSON(snapshot, false) or "{}"
+	if not file.Exists(path, "DATA") then
+		file.Write(path, payload .. "\n")
+		return
+	end
+	file.Append(path, payload .. "\n")
 end
 
 function PERF:IsEnabled()
@@ -225,12 +239,14 @@ end
 concommand.Add("hg_perf_snapshot", function(ply)
 	if not canUseCommand(ply) then return end
 	local snapshot = PERF:Snapshot(false)
+	saveSnapshot(snapshot)
 	print(util.TableToJSON(snapshot, true))
 end)
 
 concommand.Add("hg_perf_snapshot_reset", function(ply)
 	if not canUseCommand(ply) then return end
 	local snapshot = PERF:Snapshot(true)
+	saveSnapshot(snapshot)
 	print(util.TableToJSON(snapshot, true))
 end)
 
@@ -241,6 +257,7 @@ timer.Create("HGPerf_AutoReport", 1, 0, function()
 	if CurTime() < PERF.nextReportAt then return end
 	PERF.nextReportAt = CurTime() + interval
 	local snapshot = PERF:Snapshot(true)
+	saveSnapshot(snapshot)
 	if cvPrint:GetBool() then
 		print(util.TableToJSON(snapshot, true))
 	end
