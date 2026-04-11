@@ -35,6 +35,25 @@ LoadFromDir("zcity/gamemode/libraries")
 zb.modesHooks = {}
 zb.modes = zb.modes or {}
 
+local function addModeHook(MODE, hookName, func)
+    zb.modesHooks[MODE.name] = zb.modesHooks[MODE.name] or {}
+    zb.modesHooks[MODE.name][hookName] = func
+
+    hook.Add(hookName, "zb_modehook_" .. hookName, function(...)
+        local Current = zb.CROUND_MAIN or zb.CROUND or "tdm"
+
+        local modeHooks = zb.modesHooks[Current]
+        if modeHooks and modeHooks[hookName] then
+            local ModeTable = zb.modes[Current]
+            local a, b, c, d, e, f = modeHooks[hookName](ModeTable, ...)
+
+            if a ~= nil then
+                return a, b, c, d, e, f
+            end
+        end
+    end)
+end
+
 local function LoadModes()
     local directory = "zcity/gamemode/modes"
     local files, folders = file.Find(directory .. "/*", "LUA")
@@ -71,8 +90,7 @@ local function LoadModes()
 
         for k, v2 in pairs(MODE) do
             if isfunction(v2) then
-                zb.modesHooks[MODE.name] = zb.modesHooks[MODE.name] or {}
-                zb.modesHooks[MODE.name][k] = v2
+                addModeHook(MODE, k, v2)
             end
         end
 
@@ -111,8 +129,7 @@ local function LoadModes()
 
         for k, v2 in pairs(MODE) do
             if isfunction(v2) then
-                zb.modesHooks[MODE.name] = zb.modesHooks[MODE.name] or {}
-                zb.modesHooks[MODE.name][k] = v2
+                addModeHook(MODE, k, v2)
             end
         end
 
@@ -123,21 +140,3 @@ end
 LoadModes()
 
 print("ZB modes loaded!")
-
-zb.oldHook = zb.oldHook or hook.Call
-
-function hook.Call(name, gm, ...)
-    local Current = zb.CROUND_MAIN or zb.CROUND or "tdm"
-
-    local ModeTable = zb.modes[Current]
-    
-    if zb.modesHooks[Current] and zb.modesHooks[Current][name] then
-        local a, b, c, d, e, f = zb.modesHooks[Current][name](ModeTable, ...)
-
-        if (a != nil) then
-            return a, b, c, d, e, f
-        end
-    end
-
-    return zb.oldHook(name, gm, ...)
-end

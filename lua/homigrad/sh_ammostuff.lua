@@ -2818,6 +2818,134 @@ local ammoents = {
 
 hg.ammoents = ammoents
 
+local function normalizeAmmoIconName(value)
+	return string.lower(string.gsub(value or "", "[^%w]", ""))
+end
+
+local function levenshteinDistance(a, b)
+	a = a or ""
+	b = b or ""
+
+	local lenA = #a
+	local lenB = #b
+	if lenA == 0 then return lenB end
+	if lenB == 0 then return lenA end
+
+	local matrix = {}
+	for i = 0, lenA do
+		matrix[i] = {[0] = i}
+	end
+	for j = 0, lenB do
+		matrix[0][j] = j
+	end
+
+	for i = 1, lenA do
+		local charA = string.sub(a, i, i)
+		for j = 1, lenB do
+			local cost = (charA == string.sub(b, j, j)) and 0 or 1
+			local deletion = matrix[i - 1][j] + 1
+			local insertion = matrix[i][j - 1] + 1
+			local substitution = matrix[i - 1][j - 1] + cost
+			matrix[i][j] = math.min(deletion, insertion, substitution)
+		end
+	end
+
+	return matrix[lenA][lenB]
+end
+
+local function countSharedNumberTokens(a, b)
+	local tokenSet = {}
+	for token in string.gmatch(a or "", "%d+") do
+		tokenSet[token] = true
+	end
+
+	local matches = 0
+	for token in string.gmatch(b or "", "%d+") do
+		if tokenSet[token] then
+			matches = matches + 1
+		end
+	end
+
+	return matches
+end
+
+local ammoIconCache
+local generatedAmmoIconCache = {}
+local function getAmmoIconCache()
+	if ammoIconCache then return ammoIconCache end
+
+	local files = file.Find("materials/vgui/ammoicons/*.png", "GAME") or {}
+	ammoIconCache = {
+		byExact = {},
+		list = {}
+	}
+
+	for _, fileName in ipairs(files) do
+		local iconName = string.StripExtension(fileName)
+		local lowerName = string.lower(iconName)
+		local iconPath = "vgui/ammoicons/" .. iconName .. ".png"
+		ammoIconCache.byExact[lowerName] = iconPath
+		ammoIconCache.list[#ammoIconCache.list + 1] = {
+			name = iconName,
+			path = iconPath,
+			normalized = normalizeAmmoIconName(iconName)
+		}
+	end
+
+	return ammoIconCache
+end
+
+local function getTintedAmmoIcon(iconPath, ammoName, iconName, color)
+	if not CLIENT then return iconPath end
+
+	local clr = color or color_white
+	local materialName = "zcity_generated_ammoicon_" .. normalizeAmmoIconName(ammoName) .. "_" .. normalizeAmmoIconName(iconName) .. "_" .. clr.r .. "_" .. clr.g .. "_" .. clr.b
+	if not generatedAmmoIconCache[materialName] then
+		local tint = string.format("[%0.3f %0.3f %0.3f]", clr.r / 255, clr.g / 255, clr.b / 255)
+		local baseTexture = string.StripExtension(iconPath)
+		CreateMaterial(materialName, "UnlitGeneric", {
+			["$basetexture"] = baseTexture,
+			["$translucent"] = "1",
+			["$vertexalpha"] = "1",
+			["$vertexcolor"] = "1",
+			["$color"] = tint,
+			["$color2"] = tint
+		})
+		generatedAmmoIconCache[materialName] = true
+	end
+
+	return materialName
+end
+
+local function resolveAmmoIcon(ammoName, color)
+	local iconCache = getAmmoIconCache()
+	local exactIconPath = iconCache.byExact[string.lower(ammoName or "")]
+	if exactIconPath then
+		return exactIconPath
+	end
+
+	local normalizedAmmoName = normalizeAmmoIconName(ammoName)
+	if normalizedAmmoName == "" then return nil end
+
+	local bestCandidate
+	local bestScore
+	for _, iconData in ipairs(iconCache.list) do
+		local score = levenshteinDistance(normalizedAmmoName, iconData.normalized)
+		score = score - (countSharedNumberTokens(ammoName, iconData.name) * 3)
+		if string.find(normalizedAmmoName, iconData.normalized, 1, true) or string.find(iconData.normalized, normalizedAmmoName, 1, true) then
+			score = score - 2
+		end
+
+		if not bestScore or score < bestScore then
+			bestScore = score
+			bestCandidate = iconData
+		end
+	end
+
+	if not bestCandidate then return nil end
+	return getTintedAmmoIcon(bestCandidate.path, ammoName, bestCandidate.name, color)
+end
+
 local function addAmmoTypes()
 	for name, tbl in pairs(ammotypes) do
 		game.AddAmmoType(tbl)
@@ -2835,12 +2963,35 @@ local function addAmmoTypes()
 			ammoent.ModelMaterial = ammoents[name].Material or ""
 			ammoent.ModelScale = ammoents[name].Scale or 1
 			ammoent.Color = ammoents[name].Color or Color(255, 255, 255)
+			local iconPath = resolveAmmoIcon(name, ammoent.Color)
+			ammoent.IconOverride = iconPath
+			ammoent.IconTexture = iconPath
 			scripted_ents.Register(ammoent, "ent_ammo_" .. name)
 		end
 	end
 
 	game.BuildAmmoTypes()
 	--PrintTable(game.GetAmmoTypes())
+end
+
+if CLIENT then
+	local function applyAmmoIconsToRegisteredEntities()
+		for className, entData in pairs(scripted_ents.GetList() or {}) do
+			local entTable = entData and entData.t
+			if not entTable then continue end
+			if not string.StartWith(className, "ent_ammo_") then continue end
+			local ammoName = string.sub(className, 10)
+			local iconPath = resolveAmmoIcon(ammoName, entTable.Color)
+			if iconPath then
+				entTable.IconOverride = iconPath
+				entTable.IconTexture = iconPath
+			end
+		end
+	end
+
+	hook.Add("Initialize", "hg-ammo-apply-icons", applyAmmoIconsToRegisteredEntities)
+	hook.Add("OnReloaded", "hg-ammo-apply-icons", applyAmmoIconsToRegisteredEntities)
+	hook.Add("SpawnMenuOpen", "hg-ammo-apply-icons", applyAmmoIconsToRegisteredEntities)
 end
 
 addAmmoTypes()
