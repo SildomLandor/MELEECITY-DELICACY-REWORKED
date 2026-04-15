@@ -3,6 +3,30 @@ hg.achievements = hg.achievements or {}
 hg.achievements.achievements_data = hg.achievements.achievements_data or {}
 hg.achievements.achievements_data.player_achievements = hg.achievements.achievements_data.player_achievements or {}
 hg.achievements.achievements_data.created_achevements = {}
+hg.achievements.client_cache_file = hg.achievements.client_cache_file or "meleecity_achievements_client_cache.txt"
+
+local function getLocalSteamKey()
+    if not IsValid(LocalPlayer()) then return nil end
+    local sid64 = LocalPlayer():SteamID64()
+    if isstring(sid64) and sid64 ~= "" then return tostring(sid64) end
+    local sid = LocalPlayer():SteamID()
+    if isstring(sid) and sid ~= "" then return tostring(sid) end
+    return nil
+end
+
+local function loadClientCache()
+    local raw = file.Read(hg.achievements.client_cache_file, "DATA")
+    if not isstring(raw) or raw == "" then return end
+    local parsed = util.JSONToTable(raw)
+    if not istable(parsed) then return end
+    hg.achievements.achievements_data.player_achievements = parsed
+end
+
+local function saveClientCache()
+    file.Write(hg.achievements.client_cache_file, util.TableToJSON(hg.achievements.achievements_data.player_achievements, true) or "{}")
+end
+
+loadClientCache()
 
 concommand.Add("hg_achievements",function()
     if not IsValid(MainMenu) then
@@ -24,13 +48,36 @@ function hg.achievements.LoadAchievements()
 end
 
 function hg.achievements.GetLocalAchievements()
-    return hg.achievements.achievements_data.player_achievements[tostring(LocalPlayer():SteamID())]
+    local key = getLocalSteamKey()
+    if not key then return {} end
+    hg.achievements.achievements_data.player_achievements[key] = hg.achievements.achievements_data.player_achievements[key] or {}
+    return hg.achievements.achievements_data.player_achievements[key]
 end
 
 net.Receive("req_ach",function()
+    local key = getLocalSteamKey()
+    if not key then return end
     hg.achievements.achievements_data.created_achevements = net.ReadTable()
-    hg.achievements.achievements_data.player_achievements[tostring(LocalPlayer():SteamID())] = net.ReadTable()
+    hg.achievements.achievements_data.player_achievements[key] = net.ReadTable() or {}
+    saveClientCache()
     
+    if IsValid(MainMenu) and MainMenu.UpdateAchievementsList then
+        MainMenu:UpdateAchievementsList()
+    end
+end)
+
+net.Receive("hg_AchievementState", function()
+    local key = getLocalSteamKey()
+    if not key then return end
+    local achKey = net.ReadString()
+    local achValue = net.ReadFloat()
+    if not isstring(achKey) or achKey == "" then return end
+    if not isnumber(achValue) or achValue ~= achValue or achValue == math.huge or achValue == -math.huge then return end
+    hg.achievements.achievements_data.player_achievements[key] = hg.achievements.achievements_data.player_achievements[key] or {}
+    hg.achievements.achievements_data.player_achievements[key][achKey] = hg.achievements.achievements_data.player_achievements[key][achKey] or {}
+    hg.achievements.achievements_data.player_achievements[key][achKey].value = achValue
+    saveClientCache()
+
     if IsValid(MainMenu) and MainMenu.UpdateAchievementsList then
         MainMenu:UpdateAchievementsList()
     end
