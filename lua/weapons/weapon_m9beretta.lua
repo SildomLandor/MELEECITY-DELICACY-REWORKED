@@ -42,6 +42,124 @@ SWEP.FakeEmptyReloadSounds = {
 SWEP.WepSelectIcon2 = Material("vgui/icons/ico_berreta_m9.png")
 SWEP.IconOverride = "vgui/icons/ico_berreta_m9.png"
 
+local function applySkinRulesToModel(model, rules, previousIndices)
+	if not IsValid(model) then return {} end
+	previousIndices = previousIndices or {}
+	for _, idx in ipairs(previousIndices) do
+		model:SetSubMaterial(idx, "")
+	end
+
+	local materials = model:GetMaterials() or {}
+	local applied = {}
+	local matched = {}
+	for matIndex, matName in ipairs(materials) do
+		local lowerMat = string.lower(matName or "")
+		for _, rule in ipairs(rules) do
+			if string.find(lowerMat, rule[1], 1, true) then
+				model:SetSubMaterial(matIndex - 1, rule[2])
+				applied[#applied + 1] = matIndex - 1
+				matched[matIndex - 1] = true
+				break
+			end
+		end
+	end
+
+	if istable(rules) and rules[1] and isstring(rules[1][2]) and rules[1][2] ~= "" then
+		local fallbackMat = rules[1][2]
+		for matIndex = 1, #materials do
+			local subIdx = matIndex - 1
+			if not matched[subIdx] then
+				model:SetSubMaterial(subIdx, fallbackMat)
+				applied[#applied + 1] = subIdx
+			end
+		end
+	end
+
+	return applied
+end
+
+function SWEP:ApplySkinNow()
+	local skinId = self:GetNWString("hg_skin_id", "")
+	self._lastSkinId = self._lastSkinId or ""
+	self._skinModelIndices = self._skinModelIndices or {}
+	self._baseIconPath = self._baseIconPath or self.IconOverride
+	self._baseIconMat = self._baseIconMat or self.WepSelectIcon2
+	self._lastIconSkinId = self._lastIconSkinId or ""
+	if skinId == self._lastSkinId and not self._forceSkinUpdate then return end
+	self._forceSkinUpdate = nil
+	self._lastSkinId = skinId
+
+	local rules = nil
+	local iconPath = nil
+	if skinId ~= "" and hg and hg.skins and hg.skins.GetSkinInfo then
+		local info = hg.skins.GetSkinInfo(skinId)
+		if info and istable(info.material_rules) then
+			rules = info.material_rules
+		end
+		if info and isstring(info.icon) and info.icon ~= "" then
+			iconPath = info.icon
+		end
+	end
+
+	local models = {}
+	models[#models + 1] = self:GetWeaponEntity()
+	if self.GetWM then
+		models[#models + 1] = self:GetWM()
+	end
+	if IsValid(self.worldModel) then
+		models[#models + 1] = self.worldModel
+	end
+	if IsValid(self.worldModel2) then
+		models[#models + 1] = self.worldModel2
+	end
+	if IsValid(self.NPCworldModel) then
+		models[#models + 1] = self.NPCworldModel
+	end
+
+	for _, mdl in ipairs(models) do
+		if IsValid(mdl) then
+			local entIndex = mdl:EntIndex()
+			if rules then
+				self._skinModelIndices[entIndex] = applySkinRulesToModel(mdl, rules, self._skinModelIndices[entIndex] or {})
+			else
+				local old = self._skinModelIndices[entIndex] or {}
+				for _, idx in ipairs(old) do
+					mdl:SetSubMaterial(idx, "")
+				end
+				self._skinModelIndices[entIndex] = {}
+			end
+		end
+	end
+
+	if CLIENT and (self._lastIconSkinId ~= skinId or self._forceIconUpdate) then
+		self._forceIconUpdate = nil
+		self._lastIconSkinId = skinId
+		if isstring(iconPath) and iconPath ~= "" then
+			local mat = Material(iconPath)
+			if mat and not mat:IsError() then
+				self.WepSelectIcon2 = mat
+				self.IconOverride = iconPath
+			else
+				local matPng = Material(iconPath .. ".png")
+				if matPng and not matPng:IsError() then
+					self.WepSelectIcon2 = matPng
+					self.IconOverride = iconPath .. ".png"
+				else
+					self.WepSelectIcon2 = self._baseIconMat
+					self.IconOverride = self._baseIconPath
+				end
+			end
+		else
+			self.WepSelectIcon2 = self._baseIconMat
+			self.IconOverride = self._baseIconPath
+		end
+	end
+end
+
+function SWEP:ThinkAdd()
+	self:ApplySkinNow()
+end
+
 SWEP.CustomShell = "9x19"
 SWEP.EjectPos = Vector(0,2,4)
 SWEP.EjectAng = Angle(-70,-85,0)

@@ -10,6 +10,7 @@ local Selects = {
     {Title = "discord (Lapse)", Func = function(luaMenu) luaMenu:Close() gui.OpenURL("https://discord.gg/ZXUCAwuke2")  end},
     {Title = "discord (Re-City)", Func = function(luaMenu) luaMenu:Close() gui.OpenURL("https://discord.gg/er68Y7hz")  end},
     {Title = "achievements", Func = function(luaMenu) luaMenu:SwitchToAchievements() end},
+    {Title = "skins", ShouldShow = function() return hg and hg.skins and hg.skins.HasAnySkins and hg.skins.HasAnySkins() end, Func = function(luaMenu) luaMenu:OpenSkinsPanel() end},
     {Title = "appearance", Func = function(luaMenu) luaMenu:SwitchToAppearance() end},
     {Title = "traitor menu", GamemodeOnly = true, Func = function(luaMenu) luaMenu:SwitchToTraitorMenu() end},
     {Title = "disconnect", Func = function(luaMenu)
@@ -322,6 +323,15 @@ function PANEL:Init()
         local w = panel:GetWide()
         for i, btn in ipairs(self.Buttons) do
             if IsValid(btn) then
+                local shouldShow = true
+                if btn.ShouldShow then
+                    shouldShow = btn:ShouldShow()
+                end
+                btn:SetVisible(shouldShow)
+                if not shouldShow then
+                    btn.BaseY = nil
+                    continue
+                end
                 -- btn:SetSize(w, panel.ButtonHeight) -- Don't force width, use content size
                 btn:SizeToContents()
                 btn:SetWide(btn:GetWide() + ScreenScaleH(8))
@@ -336,6 +346,10 @@ function PANEL:Init()
         end
     end
     self.menuList.Think = function(panel)
+        if (self.NextMenuRefresh or 0) < CurTime() then
+            self.NextMenuRefresh = CurTime() + 0.5
+            panel:InvalidateLayout(true)
+        end
         local transitionShake = self.TransitionShakeStrength or 0
         local waveAmp = 0.35 + transitionShake * 1.25
         local baseOffsetX = (self.TransitionShakeX or 0) * 0.22
@@ -867,9 +881,360 @@ function PANEL:SwitchToAchievements()
     end
 end
 
+function PANEL:CloseSkinsPanel()
+    self.SkinsPanelOpen = false
+end
+
+function PANEL:UpdateSkinsPanelList()
+    if not IsValid(self.SkinsGrid) then return end
+    self.SkinsGrid:Clear()
+    self.SkinsCardButtons = {}
+    self.SkinsMatCache = self.SkinsMatCache or {}
+
+    local spacingX = ScreenScale(6)
+    local spacingY = ScreenScale(6)
+    self.SkinsGrid:SetSpaceX(spacingX)
+    self.SkinsGrid:SetSpaceY(spacingY)
+
+    local vbarW = 0
+    if IsValid(self.SkinsScroll) and IsValid(self.SkinsScroll:GetVBar()) then
+        vbarW = self.SkinsScroll:GetVBar():GetWide() or 0
+    end
+
+    local availableW = 0
+    if IsValid(self.SkinsScroll) then
+        availableW = math.max(0, self.SkinsScroll:GetWide() - vbarW - ScreenScale(2))
+    elseif IsValid(self.SkinsContainer) then
+        availableW = math.max(0, self.SkinsContainer:GetWide() - ScreenScale(20))
+    end
+
+    local targetColumns = 4
+    local minCardW = math.max(ScreenScale(72), 130)
+    local cardW = math.floor((availableW - spacingX * (targetColumns - 1)) / targetColumns)
+    if cardW < minCardW then
+        targetColumns = math.max(1, math.floor((availableW + spacingX) / (minCardW + spacingX)))
+        cardW = math.floor((availableW - spacingX * math.max(0, targetColumns - 1)) / math.max(1, targetColumns))
+    end
+    cardW = math.max(math.floor(minCardW), cardW)
+    local cardH = math.max(math.floor(cardW * 0.74), math.max(ScreenScaleH(70), 130))
+
+    local owned = hg and hg.skins and hg.skins.GetOwnedSkins and hg.skins.GetOwnedSkins() or {}
+    local function getEquippedMap()
+        if not hg or not hg.skins or not hg.skins.GetPlayerData then return {} end
+        local pdata = hg.skins.GetPlayerData()
+        if not istable(pdata) then return {} end
+        return pdata.equipped or {}
+    end
+
+    local function fitNameToWidth(name, maxW)
+        local text = string.lower(name or "")
+        if text == "" then return "" end
+        surface.SetFont("ZCity_Veteran")
+        local tw = surface.GetTextSize(text)
+        if tw <= maxW then return text end
+        local suffix = "..."
+        for i = #text, 1, -1 do
+            local clipped = string.sub(text, 1, i) .. suffix
+            local cw = surface.GetTextSize(clipped)
+            if cw <= maxW then
+                return clipped
+            end
+        end
+        return suffix
+    end
+
+    local keys = {}
+    for skinId in pairs(owned) do
+        keys[#keys + 1] = skinId
+    end
+
+    table.sort(keys, function(a, b)
+        return (owned[a].name or a) < (owned[b].name or b)
+    end)
+
+    local placeholderPath = "vgui/wii_moves"
+    local placeholderPathPng = "vgui/wii_moves.png"
+
+    for index, skinId in ipairs(keys) do
+        local skin = owned[skinId]
+        local card = vgui.Create("DButton", self.SkinsGrid)
+        card:SetSize(cardW, cardH)
+        card:SetText("")
+        card.SkinId = skinId
+        card.WeaponClasses = {}
+        if isstring(skin.weapon_class) and skin.weapon_class ~= "" then
+            card.WeaponClasses[#card.WeaponClasses + 1] = skin.weapon_class
+        end
+        if istable(skin.weapon_classes) then
+            for _, class in ipairs(skin.weapon_classes) do
+                if isstring(class) and class ~= "" then
+                    card.WeaponClasses[#card.WeaponClasses + 1] = class
+                end
+            end
+        end
+        card.WeaponClass = card.WeaponClasses[1]
+        card.Delay = (index - 1) * 0.045
+        card.LerpOpen = 0
+        card:SetMouseInputEnabled(true)
+
+        local iconPath = skin.icon or placeholderPath
+        local iconMat = self.SkinsMatCache[iconPath]
+        if not iconMat then
+            iconMat = Material(iconPath)
+            self.SkinsMatCache[iconPath] = iconMat
+        end
+        if iconMat:IsError() then
+            iconMat = self.SkinsMatCache[placeholderPathPng] or Material(placeholderPathPng)
+            self.SkinsMatCache[placeholderPathPng] = iconMat
+        end
+        card.IconMaterial = iconMat
+
+        card.Paint = function(s, w, h)
+            local baseLerp = self.SkinsPanelLerp or 0
+            local startTime = self.SkinsOpenTime or CurTime()
+            local localLerp = math.Clamp((CurTime() - startTime - s.Delay) / 0.22, 0, 1) * baseLerp
+            s.LerpOpen = Lerp(FrameTime() * 16, s.LerpOpen or 0, localLerp)
+
+            local shakeMul = (1 - s.LerpOpen) * 2
+            local sx = math.sin(CurTime() * 60 + index * 0.9) * shakeMul
+            local sy = math.cos(CurTime() * 54 + index * 0.7) * shakeMul
+
+            local equippedMap = getEquippedMap()
+            local isEquipped = false
+            if #s.WeaponClasses > 1 then
+                isEquipped = true
+                for _, class in ipairs(s.WeaponClasses) do
+                    if equippedMap[class] ~= s.SkinId then
+                        isEquipped = false
+                        break
+                    end
+                end
+            else
+                isEquipped = equippedMap[s.WeaponClass] == s.SkinId
+            end
+            local bgA = 180 * s.LerpOpen
+            local fgA = 255 * s.LerpOpen
+            local bg = isEquipped and Color(140, 30, 30, bgA) or Color(15, 15, 15, bgA)
+            if s:IsHovered() then
+                bg = isEquipped and Color(175, 45, 45, bgA) or Color(50, 50, 50, bgA)
+            end
+
+            draw.RoundedBox(0, sx, sy, w, h, bg)
+            surface.SetDrawColor(220, 220, 220, 100 * s.LerpOpen)
+            surface.DrawOutlinedRect(sx, sy, w, h, 1)
+
+            local pad = ScreenScale(3)
+            local iconY = sy + pad
+            local iconH = h - ScreenScaleH(30)
+            local iconW = w - pad * 2
+            surface.SetDrawColor(255, 255, 255, fgA)
+            surface.SetMaterial(s.IconMaterial)
+            surface.DrawTexturedRect(sx + pad, iconY, iconW, iconH)
+
+            local statusText = isEquipped and "equipped" or "equip"
+            draw.SimpleText(statusText, "ZCity_Veteran", sx + w - pad, sy + ScreenScaleH(8), isEquipped and Color(255, 120, 120, fgA) or Color(220, 220, 220, fgA), TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER)
+
+            local maxNameW = w - pad * 2
+            local nm = fitNameToWidth(skin.name or s.SkinId, maxNameW)
+            draw.SimpleText(nm, "ZCity_Veteran", sx + pad, sy + h - ScreenScaleH(17), Color(255, 255, 255, fgA), TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+        end
+
+        local function toggleEquip()
+            if not hg or not hg.skins or not hg.skins.EquipSkin then return end
+            local equippedMap = getEquippedMap()
+            if #card.WeaponClasses > 1 then
+                local isEquipped = true
+                for _, class in ipairs(card.WeaponClasses) do
+                    if equippedMap[class] ~= card.SkinId then
+                        isEquipped = false
+                        break
+                    end
+                end
+                if isEquipped then
+                    hg.skins.EquipSkin("__group__", "none:" .. card.SkinId)
+                else
+                    hg.skins.EquipSkin("__group__", card.SkinId)
+                end
+            else
+                local current = equippedMap[card.WeaponClass]
+                if current == card.SkinId then
+                    hg.skins.EquipSkin(card.WeaponClass, "none")
+                else
+                    hg.skins.EquipSkin(card.WeaponClass, card.SkinId)
+                end
+            end
+            if hg.skins.LoadSkins then
+                timer.Simple(0.05, function()
+                    if hg and hg.skins and hg.skins.LoadSkins then
+                        hg.skins.LoadSkins()
+                    end
+                end)
+            end
+            timer.Simple(0.18, function()
+                if IsValid(self) and self.UpdateSkinsPanelList then
+                    self:UpdateSkinsPanelList()
+                end
+            end)
+        end
+
+        card.DoClick = toggleEquip
+
+        self.SkinsGrid:Add(card)
+        self.SkinsCardButtons[#self.SkinsCardButtons + 1] = card
+    end
+end
+
+function PANEL:OpenSkinsPanel()
+    if hg and hg.skins and hg.skins.LoadSkins then
+        hg.skins.LoadSkins()
+    end
+
+    if not IsValid(self.SkinsPanel) then
+        self.SkinsPanel = vgui.Create("DPanel", self)
+        self.SkinsPanel:SetSize(ScrW(), ScrH())
+        self.SkinsPanel:SetPos(0, 0)
+        self.SkinsPanel:SetVisible(false)
+        self.SkinsPanel:SetMouseInputEnabled(false)
+        self.SkinsPanel:SetAlpha(0)
+        self.SkinsPanel.Paint = function(_, w, h)
+            surface.SetDrawColor(0, 0, 0, 80 * (self.SkinsPanelLerp or 0))
+            surface.DrawRect(0, 0, w, h)
+        end
+
+        self.SkinsPanel.Think = function()
+            local target = self.SkinsPanelOpen and 1 or 0
+            self.SkinsPanelLerp = Lerp(FrameTime() * 10, self.SkinsPanelLerp or 0, target)
+
+            if IsValid(self.menuList) then
+                self.menuList:SetVisible(not self.IsIntro)
+                self.menuList:SetAlpha(255 * (1 - self.SkinsPanelLerp))
+                self.menuList:SetMouseInputEnabled(not self.SkinsPanelOpen)
+            end
+
+            if IsValid(self.SkinsPanel) then
+                self.SkinsPanel:SetVisible((self.SkinsPanelLerp or 0) > 0.01)
+                self.SkinsPanel:SetMouseInputEnabled(self.SkinsPanelOpen)
+                self.SkinsPanel:SetAlpha(255 * (self.SkinsPanelLerp or 0))
+            end
+
+            if IsValid(self.SkinsReturnBtn) then
+                self.SkinsReturnBtn:SetAlpha(255 * (self.SkinsPanelLerp or 0))
+                self.SkinsReturnBtn:SetMouseInputEnabled(self.SkinsPanelOpen)
+            end
+
+            if IsValid(self.SkinsContainer) then
+                local s = (1 - (self.SkinsPanelLerp or 0)) * 3
+                local sx = math.sin(CurTime() * 52) * s
+                local sy = math.cos(CurTime() * 47) * s * 0.65
+                self.SkinsContainer:SetPos((self.SkinsContainerBaseX or 0) + sx, (self.SkinsContainerBaseY or 0) + sy)
+            end
+        end
+
+        self.SkinsContainer = vgui.Create("DPanel", self.SkinsPanel)
+        local boxW = math.max(ScreenScale(420), ScrW() * 0.8)
+        local boxH = math.max(ScreenScaleH(190), ScrH() * 0.62)
+        self.SkinsContainerBaseX = (ScrW() - boxW) * 0.5
+        self.SkinsContainerBaseY = ScreenScaleH(70)
+        self.SkinsContainer:SetSize(boxW, boxH)
+        self.SkinsContainer:SetPos(self.SkinsContainerBaseX, self.SkinsContainerBaseY)
+        self.SkinsContainer.Paint = function(_, w, h)
+            local a = self.SkinsPanelLerp or 0
+            draw.RoundedBox(0, 0, 0, w, h, Color(10, 10, 10, 220 * a))
+            surface.SetDrawColor(200, 200, 200, 130 * a)
+            surface.DrawOutlinedRect(0, 0, w, h, 2)
+        end
+
+        self.SkinsScroll = vgui.Create("DScrollPanel", self.SkinsContainer)
+        self.SkinsScroll:Dock(FILL)
+        self.SkinsScroll:DockMargin(ScreenScale(8), ScreenScale(8), ScreenScale(8), ScreenScale(8))
+        self.SkinsScroll:SetMouseInputEnabled(true)
+        self.SkinsGrid = vgui.Create("DIconLayout", self.SkinsScroll)
+        self.SkinsGrid:Dock(TOP)
+        self.SkinsGrid:SetSpaceX(ScreenScale(6))
+        self.SkinsGrid:SetSpaceY(ScreenScale(6))
+        self.SkinsGrid:SetMouseInputEnabled(true)
+
+        local sbar = self.SkinsScroll:GetVBar()
+        sbar:SetHideButtons(true)
+        function sbar:Paint(w, h)
+            draw.RoundedBox(0, 0, 0, w, h, Color(0, 0, 0, 80))
+        end
+        function sbar.btnGrip:Paint(w, h)
+            self.lerpcolor = Lerp(FrameTime() * 10, self.lerpcolor or 0.2, (self:IsHovered() and 0.8 or 0.6))
+            draw.RoundedBox(0, 0, 0, w, h, Color(140 * self.lerpcolor, 120 * self.lerpcolor, 90 * self.lerpcolor))
+        end
+
+        local btn = vgui.Create("DLabel", self.SkinsPanel)
+        self.SkinsReturnBtn = btn
+        btn:SetText("return")
+        btn:SetMouseInputEnabled(true)
+        btn:SetFont("ZCity_Veteran")
+        btn:SetTall(ScreenScale(18))
+        btn:SizeToContents()
+        local padding = ScreenScale(4)
+        btn:SetWide(btn:GetWide() + padding * 2)
+        btn:SetPos(ScreenScale(20), ScrH() - ScreenScaleH(40))
+        btn:SetTextColor(Color(255, 255, 255))
+        btn:SetAlpha(0)
+        btn.DoClick = function()
+            sound.PlayFile("sound/press.mp3", "noblock", function(station) if IsValid(station) then station:Play() end end)
+            self:CloseSkinsPanel()
+        end
+        btn.Paint = function(selfBtn, w, h)
+            local font = selfBtn:GetFont()
+            local text = selfBtn:GetText()
+            surface.SetFont(font)
+            local tw, _ = surface.GetTextSize(text)
+            if selfBtn:IsHovered() then
+                if not selfBtn.HoveredSoundPlayed then
+                    sound.PlayFile("sound/hover.ogg", "noblock", function(station) if IsValid(station) then station:Play() end end)
+                    selfBtn.HoveredSoundPlayed = true
+                end
+                local alpha = 255
+                if math.random() > 0.9 then alpha = math.random(50, 200) end
+                surface.SetDrawColor(255, 255, 255, alpha)
+                surface.DrawRect(padding, 0, tw, h)
+                selfBtn:SetTextColor(Color(0, 0, 0, alpha))
+            else
+                selfBtn.HoveredSoundPlayed = false
+                selfBtn:SetTextColor(Color(255, 255, 255))
+            end
+            local offX, offY = 0, 0
+            if math.random() > 0.9 then
+                offX = math.random(-2, 2)
+                offY = math.random(-2, 2)
+            end
+            draw.SimpleText(text, font, padding + offX, h / 2 + offY, selfBtn:GetTextColor(), TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+            return true
+        end
+    end
+
+    self.SkinsOpenTime = CurTime()
+    self.SkinsPanelOpen = true
+    if IsValid(self.SkinsPanel) then
+        self.SkinsPanel:SetVisible(true)
+        self.SkinsPanel:SetMouseInputEnabled(true)
+        self.SkinsPanel:MoveToFront()
+    end
+    if IsValid(self.SkinsContainer) then
+        self.SkinsContainer:SetMouseInputEnabled(true)
+    end
+    if IsValid(self.SkinsScroll) then
+        self.SkinsScroll:SetMouseInputEnabled(true)
+    end
+    if IsValid(self.SkinsGrid) then
+        self.SkinsGrid:SetMouseInputEnabled(true)
+    end
+    if IsValid(self.menuList) then
+        self.menuList:SetMouseInputEnabled(false)
+    end
+    self:UpdateSkinsPanelList()
+end
+
 function PANEL:SwitchToMain()
     self.TargetState = "Main"
     self.TransitionProgress = 0
+    self:CloseSkinsPanel()
     
     -- Music Transition
     if IsValid(ZCityAppearanceMusic) then
@@ -2528,6 +2893,11 @@ function PANEL:AddSelect( pParent, strTitle, tbl )
     btn.Func = tbl.Func
     btn.HoveredFunc = tbl.HoveredFunc
     local luaMenu = self 
+    if tbl.ShouldShow then
+        btn.ShouldShow = function()
+            return tbl.ShouldShow(luaMenu)
+        end
+    end
     if tbl.CreatedFunc then tbl.CreatedFunc(btn, self, luaMenu) end
     
     function btn:DoClick()
