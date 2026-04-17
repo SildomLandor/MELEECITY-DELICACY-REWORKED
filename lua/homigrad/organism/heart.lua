@@ -36,7 +36,7 @@ if CLIENT then
     })
     
     Heartbeat.ECGData = {}
-    Heartbeat.DataPoints = 300
+    Heartbeat.DataPoints = 600
     Heartbeat.DataIndex = 1
     Heartbeat.LastUpdateTime = 0
     Heartbeat.UpdateInterval = 0.05
@@ -275,7 +275,7 @@ if CLIENT then
             wave = wave + math.sin(phase * 6) * 0.1
         end
         
-        wave = wave + (math.random() - 0.5) * 0.05
+        wave = wave + (math.random() - 0.5) * 0.0000001
         
         return wave
     end
@@ -333,7 +333,12 @@ if CLIENT then
         
         local waveValue = self:GenerateECGWave(phase, metrics, state)
         
-        self.ECGData[self.DataIndex] = waveValue
+        local smoothedValue = waveValue
+        local prevIdx = self.DataIndex - 1
+        if prevIdx < 1 then prevIdx = self.DataPoints end
+        smoothedValue = self.ECGData[prevIdx] * 0.3 + waveValue * 0.7
+        
+        self.ECGData[self.DataIndex] = smoothedValue
         self.DataIndex = self.DataIndex + 1
         if self.DataIndex > self.DataPoints then
             self.DataIndex = 1
@@ -415,7 +420,7 @@ if CLIENT then
         for i = 0, self.DataPoints - 1 do
             local idx = (self.DataIndex + i - 1) % self.DataPoints + 1
             local x_pos = 2 + i * (self.Width / self.DataPoints)
-            local y_pos = y + 580 - self.ECGData[idx] * (self.Height * 0.15)
+            local y_pos = y + 600 - self.ECGData[idx] * (self.Height * 0.15)
             table.insert(points, {x = x_pos, y = y_pos})
         end
         

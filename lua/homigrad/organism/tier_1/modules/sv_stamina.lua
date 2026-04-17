@@ -47,13 +47,20 @@ module[2] = function(owner, org, timeValue)
 
 	stamina.sub = 0
 	local velLen = 0
+	local isLightRun = false
 	if owner:IsPlayer() then
+		local holdingWalk = owner:KeyDown(IN_WALK)
+		local isSprinting = owner:IsSprinting()
+		isLightRun = isSprinting and not holdingWalk
 		local wep = owner:GetActiveWeapon()
 		local walk = owner:KeyDown(IN_FORWARD) or owner:KeyDown(IN_BACK) or owner:KeyDown(IN_MOVELEFT) or owner:KeyDown(IN_MOVERIGHT)
-		velLen = max(min(owner:GetVelocity():Length(), org.moveMaxSpeed), 0) / (owner:GetRunSpeed() / hg_organism_stamina_sprint_mul:GetFloat())-- / ((IsValid(wep) and wep ~= NULL and wep:GetClass() == "weapon_hands_sh" and owner:KeyDown(IN_WALK)) and 1.3 or 0.58))
-		--print(velLen)
-		if (owner:OnGround() or owner:WaterLevel() >= 2) and walk and not owner:InVehicle() and owner:IsSprinting() and org.stamina[1] > 20 then
-			stamina.sub = (owner:WaterLevel() >= 2 and 2 or 1) * (velLen ^ 0.5)
+		velLen = max(min(owner:GetVelocity():Length(), org.moveMaxSpeed), 0) / (owner:GetRunSpeed() / hg_organism_stamina_sprint_mul:GetFloat())
+		if (owner:OnGround() or owner:WaterLevel() >= 2) and walk and not owner:InVehicle() and isSprinting and org.stamina[1] > 20 then
+			local staminaDrain = (owner:WaterLevel() >= 2 and 2 or 1) * (velLen ^ 0.5)
+			if isLightRun then
+				staminaDrain = staminaDrain * 0.5
+			end
+			stamina.sub = staminaDrain
 		end
 	end
 

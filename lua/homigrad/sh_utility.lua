@@ -1757,15 +1757,22 @@ local IsValid = IsValid
 
 		local has_move_input = (fm ~= 0) or (sm ~= 0)
 		local has_forward_intent = fm > 0
-		local sprinting_intent = runnin and has_forward_intent and not slow_walking and not aiming and not ply:Crouching()
+		local holding_walk = ply:KeyDown(IN_WALK)
+		local sprinting_intent = runnin and has_forward_intent and not aiming and not ply:Crouching()
 		ply.SprintWindup = ply.SprintWindup or 0
 		local sprint_windup_in = delta_time * 3.2 * hg_movement_sprint_windup_mul:GetFloat() * math.Clamp(weightmul, 0.6, 1)
 		local sprint_windup_out = delta_time * 4.6
 		ply.SprintWindup = math.Approach(ply.SprintWindup, sprinting_intent and 1 or 0, sprinting_intent and sprint_windup_in or sprint_windup_out)
 
+		local runSpeed = ply:GetRunSpeed()
 		if(runnin and (velLen >= 1 or has_move_input))then
-			local sprint_target_speed = Lerp(ply.SprintWindup, walk_speed * mul * 1.05, (ply.move or ply:GetRunSpeed()) * mul)
-			ply.CurrentSpeed = math.Approach(ply.CurrentSpeed, sprint_target_speed, delta_time * ply.SpeedGainMul)
+			local light_run = walk_speed * mul * 2.1
+			local full_sprint = runSpeed * mul
+			if holding_walk then
+				ply.CurrentSpeed = math.Approach(ply.CurrentSpeed, full_sprint, delta_time * ply.SpeedGainMul)
+			else
+				ply.CurrentSpeed = math.Approach(ply.CurrentSpeed, light_run, delta_time * ply.SpeedGainMul)
+			end
 		else
 			if(ply:Crouching())then
 				ply.CurrentSpeed = math.Approach(ply.CurrentSpeed, crouch_walk_speed * mul, delta_time * ply.SpeedLoseMul)
